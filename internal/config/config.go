@@ -40,6 +40,8 @@ type JioTVConfig struct {
 	DefaultCategories []int `yaml:"default_categories" env:"JIOTV_DEFAULT_CATEGORIES" json:"default_categories" toml:"default_categories"`
 	// DefaultLanguages is the list of language IDs to display on the default web page. Default: []
 	DefaultLanguages []int `yaml:"default_languages" env:"JIOTV_DEFAULT_LANGUAGES" json:"default_languages" toml:"default_languages"`
+	// FavoriteChannelIDs is the list of channel IDs to be marked as favorites. Default: []
+	FavoriteChannelIDs []string `yaml:"favorite_channel_ids" env:"JIOTV_FAVORITE_CHANNEL_IDS" json:"favorite_channel_ids" toml:"favorite_channel_ids"`
 }
 
 // Cfg is the global config variable

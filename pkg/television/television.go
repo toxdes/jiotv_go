@@ -528,6 +528,24 @@ func FilterChannelsByDefaults(channels []Channel, categories, languages []int) [
 	return filteredChannels
 }
 
+// FilterFavoriteChannels filters channels by favorite channel IDs and preserves the order.
+func FilterFavoriteChannels(channels []Channel) []Channel {
+	// Create a map of channels for efficient lookup
+	channelMap := make(map[string]Channel, len(channels))
+	for _, channel := range channels {
+		channelMap[channel.ID] = channel
+	}
+
+	// Create a slice of filtered channels, preserving the order from the config
+	filteredChannels := make([]Channel, 0, len(config.Cfg.FavoriteChannelIDs))
+	for _, id := range config.Cfg.FavoriteChannelIDs {
+		if channel, ok := channelMap[id]; ok {
+			filteredChannels = append(filteredChannels, channel)
+		}
+	}
+	return filteredChannels
+}
+
 func ReplaceM3U8(baseUrl, match []byte, params, channel_id string, quality string) []byte {
 	// Attempt to extract hdnea from params if present
 	hdnea := ""

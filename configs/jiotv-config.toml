@@ -42,3 +42,7 @@ default_categories = []
 # Default languages to display on the web page without filters. Array of language IDs. Default: []
 # Example: default_languages = [1, 6] # Hindi, English
 default_languages = []
+
+# Favorite Channel IDs to display in the M3U playlist when fav=true is used. Array of channel IDs. Default: []
+# Example: favorite_channel_ids = ["101", "102", "105"]
+favorite_channel_ids = []

@@ -61,7 +61,9 @@ This section provides information about the API endpoints that JioTV Go offers. 
 
 You can append `?q=<level>` to the path where `<level>` should be replaced with `low`, `medium`, `high`, or `l`, `m`, `h` to set the quality of the stream. The default quality is `auto`.
 
-You can also append `&c=split` to the path to have categories based on both language and genre. Example categories: `Hindi - Entertainment`, `English - News`, `Tamil - Sports`, etc.
+You can also append `&fav=true` to the path to filter only your favorite channels. This requires you to have `favorite_channel_ids` configured in your config file. See [Config Documentation](../config.md#favorite-channel-ids) for more details.
+
+You can also append `&fav=true` to the path to filter only your favorite channels. This requires you to have `favorite_channel_ids` configured in your config file. See [Config Documentation](../config.md#favorite-channel-ids) for more details.
 
 You can also append `&sg=<genre_list>` to the path in order to skip specific genres. Here replace `<genre_list>` with comma(,) seperated list of genres.
 Valid genres: `Entertainment`, `Movies`, `Kids`, `Sports`, `Lifestyle`, `Infotainment`, `News`, `Music`, `Devotional`, `Business`, `Educational`, `Shopping`, `JioDarshan`

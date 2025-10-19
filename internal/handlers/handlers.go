@@ -516,7 +516,12 @@ func ChannelsHandler(c *fiber.Ctx) error {
 		// Create an M3U playlist
 		m3uContent := "#EXTM3U x-tvg-url=\"" + hostURL + "/epg.xml.gz\"\n"
 		logoURL := hostURL + "/jtvimage"
-		for _, channel := range apiResponse.Result {
+		channels := apiResponse.Result
+		if c.Query("fav") == "true" {
+			channels = television.FilterFavoriteChannels(channels)
+		}
+		utils.Log.Printf("FILTERED CHANNELS=%v\n", channels)
+		for _, channel := range channels {
 
 			if languages != "" && !utils.ContainsString(television.LanguageMap[channel.Language], strings.Split(languages, ",")) {
 				continue

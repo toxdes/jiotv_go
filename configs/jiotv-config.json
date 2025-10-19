@@ -12,5 +12,6 @@
     "log_to_stdout": false,
     "custom_channels_file": "",
     "default_categories": [],
-    "default_languages": []
+    "default_languages": [],
+    "favorite_channel_ids": []
 }

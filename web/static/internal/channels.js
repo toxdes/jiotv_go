@@ -127,16 +127,26 @@ function displayFavoriteChannels() {
   }
 
   const allChannelCards = document.querySelectorAll('a.card[data-channel-id]');
+  const cardsMap = new Map();
+  allChannelCards.forEach(card => {
+    cardsMap.set(card.dataset.channelId, card);
+  });
 
   // Create DocumentFragments to batch DOM updates
   const favoriteFragment = document.createDocumentFragment();
   const originalFragment = document.createDocumentFragment();
 
-  allChannelCards.forEach(card => {
-    const cardChannelId = card.dataset.channelId;
-    if (favoriteIds.includes(cardChannelId)) {
+  // Add favorites to fragment in correct order
+  favoriteIds.forEach(id => {
+    const card = cardsMap.get(id);
+    if (card) {
       favoriteFragment.appendChild(card);
-    } else {
+    }
+  });
+
+  // Add all other cards to original fragment
+  allChannelCards.forEach(card => {
+    if (!favoriteIds.includes(card.dataset.channelId)) {
       originalFragment.appendChild(card);
     }
   });
