@@ -91,11 +91,21 @@ func Update(currentVersion, customVersion string) error {
 	return nil
 }
 
+var (
+	// ReleaseOwner is the GitHub owner (user or org) for update checks.
+	// Override via ldflags: -X cmd.ReleaseOwner=yourfork
+	ReleaseOwner = "JioTV-Go"
+
+	// ReleaseRepo is the GitHub repository name for update checks.
+	// Override via ldflags: -X cmd.ReleaseRepo=jiotv_go
+	ReleaseRepo = "jiotv_go"
+)
+
 // getLatestRelease fetches the latest release information from the GitHub API for the given owner and repo.
 // It returns a Release struct containing the release details like tag name, assets etc.
 func getLatestRelease(customVersion string) (*Release, error) {
-	owner := "JioTV-Go"
-	repo := "jiotv_go"
+	owner := ReleaseOwner
+	repo := ReleaseRepo
 
 	var url string
 	if customVersion != "" {

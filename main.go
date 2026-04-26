@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jiotv-go/jiotv_go/v3/cmd"
@@ -18,15 +19,20 @@ import (
 //go:embed VERSION
 var version string
 
+// versionSuffix is appended to the version string (e.g. "-toxdes.1").
+// Override via ldflags: -X main.versionSuffix=-toxdes.1
+var versionSuffix = ""
+
 func main() {
 	// Set JioTV Go version
-	constants.Version = version
+	v := strings.TrimSpace(version) + versionSuffix
+	constants.Version = v
 
 	app := &cli.App{
 		Name:      "JioTV Go",
 		Usage:     "Stream JioTV on any device",
 		HelpName:  "jiotv_go",
-		Version:   version,
+		Version:   v,
 		Copyright: "© JioTV Go (https://github.com/jiotv-go/jiotv_go)",
 		Compiled:  time.Now(),
 		Suggest:   true,
