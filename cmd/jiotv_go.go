@@ -114,6 +114,7 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	app.Get("/render.ts", handlers.RenderTSHandler)
 	app.Get("/render.key", handlers.RenderKeyHandler)
 	app.Get("/channels", handlers.ChannelsHandler)
+	app.Get("/fav", handlers.FavHandler)
 	app.Get("/playlist.m3u", handlers.PlaylistHandler)
 	app.Get("/play/:id", handlers.PlayHandler)
 	app.Get("/player/:id", handlers.PlayerHandler)

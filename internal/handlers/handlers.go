@@ -568,6 +568,18 @@ func ChannelsHandler(c *fiber.Ctx) error {
 	return c.JSON(apiResponse)
 }
 
+// FavHandler serves M3U playlist of only favorite channels (alias for /channels?type=m3u&fav=true)
+func FavHandler(c *fiber.Ctx) error {
+	uri := c.Request().URI()
+	q := string(uri.QueryString())
+	if q != "" {
+		uri.SetQueryString(q + "&type=m3u&fav=true")
+	} else {
+		uri.SetQueryString("type=m3u&fav=true")
+	}
+	return ChannelsHandler(c)
+}
+
 // PlayHandler loads HTML Page with video player iframe embedded with video URL
 // URL is generated from the channel ID
 func PlayHandler(c *fiber.Ctx) error {
