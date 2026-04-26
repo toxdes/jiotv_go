@@ -9,6 +9,7 @@
 *.dylib
 build/
 jiotv_go
+bin/
 
 # Main binary
 jiotv_go
