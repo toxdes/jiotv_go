@@ -8,6 +8,49 @@ _Give us 🌟 on GitHub if you like this project!_
 
 We have video tutorials for [Windows](https://youtu.be/BnNTYTSvVBc), and [Android](https://youtu.be/ejiuml11g8o) users. Please watch them if you are unsure about the installation process.
 
+## Fork Updates
+
+This fork maintains the upstream codebase with the following additions:
+
+### Channel Favourites (Config-based)
+
+Configure a list of favourite channels in your config file using the `favorite_channel_ids` field (or the `JIOTV_FAVORITE_CHANNEL_IDS` environment variable):
+
+```yaml
+favorite_channel_ids:
+  - "ChannelID1"
+  - "ChannelID2"
+```
+
+These are used server-side to generate filtered M3U playlists (see `fav=true` parameter below).
+
+### Client-side Favourites in Web UI
+
+The web interface includes a per-channel star button that marks channels as favourites. Favourites are stored in your browser's `localStorage` and are preserved across sessions. The order in which you add favourites is preserved (newest last). **Note:** This client-side feature is independent of the config-based favourites above and does not sync with the server.
+
+### Channel ID Display in Web UI
+
+Each channel card in the web interface now shows its channel ID (`ID:...`) for easy reference — useful for configuring favourites or debugging.
+
+### `fav=true` Query Parameter
+
+The `/channels` endpoint accepts a `fav=true` query parameter. When combined with `type=m3u`, it returns an M3U playlist containing only the channels listed in `favorite_channel_ids` (config-based), preserving the configured order:
+
+```
+/channels?type=m3u&fav=true
+```
+
+### `/fav` Alias
+
+A dedicated `/fav` endpoint is available as a shorthand for `/channels?type=m3u&fav=true`. You can also pass additional query parameters (e.g. language filters) which are forwarded:
+
+```
+/fav
+/fav?language=english
+```
+
+---
+
 ## Features 🌟
 
 - 📺 Stream Live TV channels, just like in the JioTV Android app.
@@ -30,6 +73,12 @@ Get Started with JioTV Go by following the [Get Started](https://jiotv_go.rabil.
   <summary>Click to expand/collapse</summary>
   
 - [JioTV Go 📺](#jiotv-go-)
+  - [Fork Updates](#fork-updates)
+    - [Channel Favourites (Config-based)](#channel-favourites-config-based)
+    - [Client-side Favourites in Web UI](#client-side-favourites-in-web-ui)
+    - [Channel ID Display in Web UI](#channel-id-display-in-web-ui)
+    - [`fav=true` Query Parameter](#favtrue-query-parameter)
+    - [`/fav` Alias](#fav-alias)
   - [Features 🌟](#features-)
   - [Table of Contents](#table-of-contents)
   - [Documentation](#documentation)
