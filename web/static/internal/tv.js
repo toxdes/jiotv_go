@@ -321,11 +321,6 @@
     });
   }
 
-  // Restore fav toggle state from localStorage
-  if (localStorage.getItem(FAV_TOGGLE_KEY) === "1") {
-    setFavActive(true);
-  }
-
   // ── Channel Number Typing (1-indexed position, fallback to ID) ────────
 
   var numBuffer = "";
@@ -480,7 +475,10 @@
 
   var initFn = function () {
     initCache();
-    if (visibleIndices.length > 0) {
+    // Restore fav toggle state after cache is populated
+    if (localStorage.getItem(FAV_TOGGLE_KEY) === "1") {
+      setFavActive(true);
+    } else if (visibleIndices.length > 0) {
       focusCardByIndex(visibleIndices[0]);
     }
   };
