@@ -160,6 +160,24 @@
         opacity: 0.5;
       }
 
+      #tv-player-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        background: #000;
+        display: none;
+      }
+
+      #tv-player-overlay.active {
+        display: block;
+      }
+
+      #tv-player-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+
       @media (min-width: 1920px) {
         .tv-grid { grid-template-columns: repeat(7, 1fr); }
       }
@@ -218,6 +236,10 @@
       </a>
       {{end}}
       <div id="tv-no-results" class="tv-no-results" style="display:none">No channels found</div>
+    </div>
+
+    <div id="tv-player-overlay">
+      <iframe id="tv-player-iframe" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen></iframe>
     </div>
 
     <script src="/static/internal/tv.js"></script>

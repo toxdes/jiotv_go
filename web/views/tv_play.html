@@ -183,7 +183,11 @@
         }
 
         function goBack() {
-          window.location.href = "/tv";
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: "back" }, "*");
+          } else {
+            window.location.href = "/tv";
+          }
         }
 
         function sendToIframe(type) {

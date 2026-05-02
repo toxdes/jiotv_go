@@ -1,5 +1,5 @@
 // tv.js - Spatial navigation and TV remote support for channel grid
-// Optimized for 900+ channel grids: cached elements, debounced search, minimal DOM thrashing
+// SPA mode: player opens as fullscreen overlay, back returns instantly to grid
 
 (function () {
   "use strict";
@@ -8,19 +8,76 @@
   var searchInput = document.getElementById("tv-search-input");
   var qualitySelect = document.getElementById("tv-quality-select");
   var noResults = document.getElementById("tv-no-results");
+  var playerOverlay = document.getElementById("tv-player-overlay");
+  var playerIframe = document.getElementById("tv-player-iframe");
 
   if (!grid) return;
 
   // ── Cached state ──────────────────────────────────────────────────────
 
   var allCards = [];
-  var channelIdMap = Object.create(null); // channel_id -> card element
-  var visibleIndices = [];   // indices into allCards for visible items
+  var channelIdMap = Object.create(null);
+  var visibleIndices = [];
   var cols = 5;
-  var currentIndex = -1;     // index into allCards (not visibleIndices)
+  var currentIndex = -1;
   var resizeTimer = null;
+  var playerOpen = false;
+  var lastFocusedIndex = -1;
 
-  // ── Initialization (runs once) ─────────────────────────────────────────
+  // ── SPA: player overlay ───────────────────────────────────────────────
+
+  function openChannel(card) {
+    var href = card.getAttribute("href");
+    if (!href) return;
+
+    lastFocusedIndex = currentIndex;
+    playerOpen = true;
+    playerOverlay.classList.add("active");
+    document.body.style.overflow = "hidden";
+    playerIframe.src = href;
+
+    // Update URL so browser back works
+    history.pushState({ overlay: true }, "", href);
+
+    setTimeout(function () {
+      playerIframe.focus();
+    }, 200);
+  }
+
+  function closeChannel() {
+    playerOpen = false;
+    playerOverlay.classList.remove("active");
+    document.body.style.overflow = "";
+    playerIframe.src = "";
+
+    // Restore URL
+    history.replaceState(null, "", "/tv");
+
+    // Refocus the grid
+    setTimeout(function () {
+      if (lastFocusedIndex >= 0 && allCards[lastFocusedIndex]) {
+        focusCardByIndex(lastFocusedIndex);
+      } else if (visibleIndices.length > 0) {
+        focusCardByIndex(visibleIndices[0]);
+      }
+    }, 50);
+  }
+
+  // Listen for back message from player iframe
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "back" && playerOpen) {
+      closeChannel();
+    }
+  });
+
+  // Browser back button
+  window.addEventListener("popstate", function (e) {
+    if (playerOpen) {
+      closeChannel();
+    }
+  });
+
+  // ── Initialization ─────────────────────────────────────────────────────
 
   function initCache() {
     var cards = grid.querySelectorAll(".tv-card");
@@ -38,12 +95,9 @@
     cols = getComputedStyle(grid).gridTemplateColumns.split(" ").length || 5;
   }
 
-  // Debounced resize handler
   window.addEventListener("resize", function () {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () {
-      updateColumnCount();
-    }, 200);
+    resizeTimer = setTimeout(updateColumnCount, 200);
   });
 
   // ── Visible list management ────────────────────────────────────────────
@@ -63,6 +117,23 @@
   function indexInVisible(realIndex) {
     return visibleIndices.indexOf(realIndex);
   }
+
+  // ── Click delegation for cards (SPA: open overlay instead of navigate) ─
+
+  grid.addEventListener("click", function (e) {
+    var card = e.target.closest(".tv-card");
+    if (!card) return;
+    e.preventDefault();
+    openChannel(card);
+  });
+
+  grid.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var card = e.target.closest(".tv-card");
+    if (!card) return;
+    e.preventDefault();
+    openChannel(card);
+  });
 
   // ── Spatial Navigation ────────────────────────────────────────────────
 
@@ -120,19 +191,16 @@
     lastSearchQuery = query;
 
     var q = query.toLowerCase().trim();
-    var anyVisible = false;
 
     for (var i = 0; i < allCards.length; i++) {
       var card = allCards[i];
       if (!q) {
         card.classList.remove("hidden");
-        anyVisible = true;
       } else {
         var name = (card.getAttribute("data-channel-name") || "").toLowerCase();
         var id = (card.getAttribute("data-channel-id") || "").toLowerCase();
         if (name.indexOf(q) !== -1 || id.indexOf(q) !== -1) {
           card.classList.remove("hidden");
-          anyVisible = true;
         } else {
           card.classList.add("hidden");
         }
@@ -141,7 +209,6 @@
 
     rebuildVisible();
 
-    // Reset focus to first visible card
     currentIndex = -1;
     if (visibleIndices.length > 0) {
       focusCardByIndex(visibleIndices[0]);
@@ -214,7 +281,7 @@
 
     var match = channelIdMap[targetId];
     if (match) {
-      window.location.href = match.getAttribute("href");
+      openChannel(match);
     } else if (numOverlay) {
       showNumOverlay("No match: " + targetId);
       setTimeout(hideNumOverlay, 1500);
@@ -225,6 +292,21 @@
 
   document.addEventListener("keydown", function (e) {
     var tag = document.activeElement ? document.activeElement.tagName : "";
+
+    // ── SPA: Back key handling ───────────────────────────────────────
+    if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
+      if (playerOpen) {
+        e.preventDefault();
+        closeChannel();
+        return;
+      }
+      // If on grid and nothing to go back to, do nothing (app is root)
+      // WebOS will handle system-level back
+    }
+
+    if (playerOpen) return; // let iframe handle all other keys
+
+    // ── Grid keys ────────────────────────────────────────────────────
 
     if (tag === "INPUT" || tag === "TEXTAREA") {
       if (tag === "INPUT" && e.key === "Escape") {
@@ -266,7 +348,6 @@
 
     if (!visibleIndices.length) return;
 
-    // Arrow key navigation
     if (
       e.key === "ArrowRight" ||
       e.key === "ArrowLeft" ||
@@ -287,25 +368,10 @@
       }
       return;
     }
-
-    // Media key — forward to player iframe
-    if (
-      e.key === "MediaPlayPause" ||
-      e.keyCode === 179 ||
-      e.keyCode === 415
-    ) {
-      var iframe = document.querySelector("iframe");
-      if (iframe && iframe.contentWindow) {
-        try {
-          iframe.contentWindow.postMessage({ type: "togglePlay" }, "*");
-        } catch (err) {}
-      }
-    }
   });
 
   // ── Initialization ──────────────────────────────────────────────────────
 
-  // Use requestIdleCallback or fallback to setTimeout for post-load init
   var initFn = function () {
     initCache();
     if (visibleIndices.length > 0) {
