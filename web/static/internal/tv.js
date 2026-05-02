@@ -253,12 +253,19 @@
   var favBtn = document.getElementById("tv-fav-btn");
   var favActive = false;
   var FAV_TOGGLE_KEY = "tvFavFilter";
+  var hasFavorites = serverFavIds.length > 0;
+
+  // Hide the fav button if no favorites are configured
+  if (favBtn && !hasFavorites) {
+    favBtn.style.display = "none";
+  }
 
   function getFavIds() {
     return serverFavIds;
   }
 
   function setFavActive(active) {
+    if (!hasFavorites) return;
     favActive = active;
     if (favBtn) {
       if (active) {
@@ -286,11 +293,13 @@
   }
 
   function toggleFav() {
+    if (!hasFavorites) return;
     setFavActive(!favActive);
   }
 
   function applyFavFilter() {
     var favIds = getFavIds();
+    if (favIds.length === 0) return; // guard: no favorites configured
     var favSet = Object.create(null);
     for (var i = 0; i < favIds.length; i++) {
       favSet[favIds[i]] = true;
