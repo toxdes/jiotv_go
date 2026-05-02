@@ -124,10 +124,11 @@
         var error = document.getElementById("setup-error");
         var STORAGE_KEY = "jiotvgo_server_url";
 
-        // Load saved URL if present
+        // If URL already saved, skip setup and go straight to TV
         var saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-          input.value = saved;
+          window.location.href = saved.replace(/\/+$/, "") + "/tv";
+          return;
         }
 
         function showError(msg) {

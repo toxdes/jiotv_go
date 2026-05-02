@@ -38,10 +38,11 @@ func TVIndexHandler(c *fiber.Ctx) error {
 	category := c.Query("category")
 
 	tvContext := fiber.Map{
-		"Title":      Title,
-		"Channels":   nil,
-		"Categories": television.CategoryMap,
-		"Languages":  television.LanguageMap,
+		"Title":              Title,
+		"Channels":           nil,
+		"Categories":         television.CategoryMap,
+		"Languages":          television.LanguageMap,
+		"FavoriteChannelIDs": config.Cfg.FavoriteChannelIDs,
 		"Qualities": map[string]string{
 			"auto":   "Auto",
 			"high":   "High",

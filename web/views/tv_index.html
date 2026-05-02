@@ -98,6 +98,7 @@
       }
 
       .tv-card {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -152,7 +153,7 @@
       .tv-card-id {
         position: absolute;
         top: 0.4rem;
-        left: 0.5rem;
+        right: 0.5rem;
         font-size: 0.8rem;
         font-weight: 700;
         opacity: 0.5;
@@ -259,7 +260,7 @@
         />
         <span class="tv-card-name">{{ $channel.Name }}</span>
         <span class="tv-card-id">{{ $channel.ID }}</span>
-        <span class="tv-card-num">{{ $channel.ID }}</span>
+        <span class="tv-card-num"></span>
       </a>
       {{end}}
       <div id="tv-no-results" class="tv-no-results" style="display:none">No channels found</div>
@@ -270,6 +271,9 @@
       <div id="tv-player-chan-label"></div>
     </div>
 
+    <script>
+      window.TV_FAVORITE_IDS = [{{ range $index, $id := .FavoriteChannelIDs }}{{ if $index }},{{ end }}"{{ $id }}"{{ end }}];
+    </script>
     <script src="/static/internal/tv.js"></script>
   </body>
 </html>

@@ -12,6 +12,10 @@
 
   if (!grid) return;
 
+  // ── Server fav IDs (from config.toml favorite_channel_ids) ────────────
+
+  var serverFavIds = window.TV_FAVORITE_IDS || [];
+
   // ── Cached state ──────────────────────────────────────────────────────
 
   var allCards = [];
@@ -31,7 +35,6 @@
     var name = card.getAttribute("data-channel-name") || id;
     var url = "/mpd/" + id + "?q=auto";
 
-    // Find the real index of this card
     for (var i = 0; i < allCards.length; i++) {
       if (allCards[i] === card) {
         playingCardIndex = i;
@@ -71,6 +74,15 @@
     }, 50);
   }
 
+  // Capture-phase Back handler — intercepts before iframe sees it
+  document.addEventListener("keydown", function (e) {
+    if (playerOpen && (e.key === "GoBack" || e.keyCode === 461)) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeChannel();
+    }
+  }, true);
+
   // Listen for back message from player iframe
   window.addEventListener("message", function (e) {
     if (e.data && e.data.type === "back" && playerOpen) {
@@ -108,13 +120,18 @@
     resizeTimer = setTimeout(updateColumnCount, 200);
   });
 
-  // ── Visible list management ────────────────────────────────────────────
+  // ── Visible list + channel numbers (1-indexed) ────────────────────────
 
   function rebuildVisible() {
     visibleIndices = [];
     for (var i = 0; i < allCards.length; i++) {
       if (!allCards[i].classList.contains("hidden")) {
         visibleIndices.push(i);
+        var numEl = allCards[i].querySelector(".tv-card-num");
+        if (numEl) numEl.textContent = String(visibleIndices.length);
+      } else {
+        var numEl = allCards[i].querySelector(".tv-card-num");
+        if (numEl) numEl.textContent = "";
       }
     }
     if (noResults) {
@@ -167,7 +184,7 @@
         if (row > 0) return Math.max(visIndex - cols, 0);
         break;
     }
-    return -1; // can't move in this direction
+    return -1;
   }
 
   function focusCardByIndex(realIndex) {
@@ -231,20 +248,14 @@
     }
   }
 
-  // ── Favorites Toggle ────────────────────────────────────────────────────
+  // ── Favorites Toggle (from server config) ──────────────────────────────
 
   var favBtn = document.getElementById("tv-fav-btn");
   var favActive = false;
   var FAV_TOGGLE_KEY = "tvFavFilter";
-  var FAV_CHANNELS_KEY = "favoriteChannels";
 
   function getFavIds() {
-    try {
-      var raw = localStorage.getItem(FAV_CHANNELS_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
+    return serverFavIds;
   }
 
   function setFavActive(active) {
@@ -315,7 +326,7 @@
     setFavActive(true);
   }
 
-  // ── Channel Number Typing ──────────────────────────────────────────────
+  // ── Channel Number Typing (1-indexed position, fallback to ID) ────────
 
   var numBuffer = "";
   var numTimer = null;
@@ -335,14 +346,22 @@
 
   function commitNumBuffer() {
     if (numBuffer.length === 0) return;
-    var targetId = numBuffer.replace(/^0+/, "") || "0";
+    var raw = numBuffer.replace(/^0+/, "") || "0";
     resetNumBuffer();
 
-    var match = channelIdMap[targetId];
+    // First try as 1-indexed position in the visible list
+    var idx = parseInt(raw, 10) - 1;
+    if (idx >= 0 && idx < visibleIndices.length) {
+      openChannel(allCards[visibleIndices[idx]]);
+      return;
+    }
+
+    // Fall back to channel ID lookup
+    var match = channelIdMap[raw];
     if (match) {
       openChannel(match);
     } else if (numOverlay) {
-      showNumOverlay("No match: " + targetId);
+      showNumOverlay("No match: " + raw);
       setTimeout(hideNumOverlay, 1500);
     }
   }
@@ -364,8 +383,8 @@
       return;
     }
 
-    // ── SPA: Back key handling ───────────────────────────────────────
-    if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
+    // ── SPA: Back key handling (bubbling phase — for keyboard Backspace) ─
+    if (e.key === "Backspace") {
       if (playerOpen) {
         e.preventDefault();
         closeChannel();
@@ -395,14 +414,12 @@
         return;
       }
       if (e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        // Keep focus on fav button — ignore other directions
         return;
       }
     }
 
     // ── Grid keys ────────────────────────────────────────────────────
 
-    // Digit keys — channel number typing
     if (e.key >= "0" && e.key <= "9") {
       e.preventDefault();
       clearTimeout(numTimer);
@@ -453,7 +470,6 @@
       if (nextVis >= 0) {
         focusCardByIndex(visibleIndices[nextVis]);
       } else if (e.key === "ArrowUp" && favBtn) {
-        // Can't go up further — focus fav button
         favBtn.focus();
       }
       return;
