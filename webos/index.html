@@ -127,7 +127,7 @@
         // If URL already saved, skip setup and go straight to TV
         var saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-          window.location.href = saved.replace(/\/+$/, "") + "/tv";
+          window.location.href = saved.replace(/\/+$/, "") + "/tv?_=" + Date.now();
           return;
         }
 

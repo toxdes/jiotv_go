@@ -37,6 +37,9 @@ func TVIndexHandler(c *fiber.Ctx) error {
 	language := c.Query("language")
 	category := c.Query("category")
 
+	// Never cache the TV page — stale data breaks fav filter
+	internalUtils.SetCacheHeader(c, 0)
+
 	tvContext := fiber.Map{
 		"Title":              Title,
 		"Channels":           nil,
