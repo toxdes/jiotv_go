@@ -44,6 +44,7 @@
       .tv-player-topbar {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 1rem;
         padding: 1rem 1.5rem;
         background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
@@ -94,12 +95,40 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+
+      .tv-play-hint {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 200;
+        display: none;
+        align-items: center;
+        gap: 0.75rem;
+        background: rgba(0,0,0,0.75);
+        color: #fff;
+        padding: 1rem 2rem;
+        border-radius: 1rem;
+        font-size: 1.5rem;
+        font-weight: 600;
+        pointer-events: none;
+      }
+
+      .tv-play-hint.visible {
+        display: flex;
+      }
+
+      .tv-play-hint svg {
+        width: 2rem;
+        height: 2rem;
+      }
     </style>
   </head>
 
   <body>
     <div class="tv-player-wrapper">
       <iframe
+        id="tv-player-iframe"
         src="{{ .player_url }}"
         allow="autoplay; fullscreen"
         allowfullscreen
@@ -109,8 +138,8 @@
     </div>
 
     <div id="tv-player-overlay" class="tv-player-overlay">
-      <div id="tv-player-topbar" class="tv-player-topbar">
-        <button id="tv-back-btn" class="tv-back-btn" tabindex="0">
+      <div id="tv-player-topbar" class="tv-player-topbar visible">
+        <button id="tv-back-btn" class="tv-back-btn">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
@@ -120,63 +149,167 @@
       </div>
     </div>
 
+    <div id="tv-play-hint" class="tv-play-hint">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path fill-rule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.652Z" clip-rule="evenodd" />
+      </svg>
+      Press Play
+    </div>
+
     <script>
       (function () {
+        var iframe = document.getElementById("tv-player-iframe");
         var topbar = document.getElementById("tv-player-topbar");
         var backBtn = document.getElementById("tv-back-btn");
+        var playHint = document.getElementById("tv-play-hint");
         var hideTimer = null;
-        var visible = true;
+        var topbarVisible = true;
+        var backPressTimer = null;
+        var BACK_DOUBLE_WINDOW = 3000;
+        var playerReady = false;
+        var playerPlaying = false;
 
         function showTopbar() {
           topbar.classList.add("visible");
-          visible = true;
+          topbarVisible = true;
           clearTimeout(hideTimer);
-          hideTimer = setTimeout(function () {
-            topbar.classList.remove("visible");
-            visible = false;
-          }, 5000);
+          hideTimer = setTimeout(hideTopbar, 5000);
         }
 
         function hideTopbar() {
           topbar.classList.remove("visible");
-          visible = false;
+          topbarVisible = false;
           clearTimeout(hideTimer);
         }
 
-        // Show topbar on any user interaction
-        document.addEventListener("keydown", function (e) {
-          showTopbar();
+        function goBack() {
+          window.location.href = "/tv";
+        }
 
-          // Back navigation
+        function sendToIframe(type) {
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: type }, "*");
+          }
+        }
+
+        function showPlayHint() {
+          if (!playerPlaying) {
+            playHint.classList.add("visible");
+          }
+        }
+
+        function hidePlayHint() {
+          playHint.classList.remove("visible");
+        }
+
+        // ── Iframe message handling ──────────────────────────────────────
+
+        window.addEventListener("message", function (e) {
+          if (!e.data || typeof e.data.type !== "string") return;
+
+          switch (e.data.type) {
+            case "ready":
+              playerReady = true;
+              sendToIframe("play");
+              break;
+            case "playing":
+              playerPlaying = true;
+              hidePlayHint();
+              break;
+            case "paused":
+              playerPlaying = false;
+              break;
+            case "autoplayFailed":
+              playerReady = true;
+              showPlayHint();
+              break;
+          }
+        });
+
+        // ── Keyboard handling ────────────────────────────────────────────
+
+        document.addEventListener("keydown", function (e) {
+          // Media keys — forward to iframe
+          if (
+            e.key === "MediaPlayPause" ||
+            e.keyCode === 179 ||
+            e.keyCode === 415
+          ) {
+            e.preventDefault();
+            sendToIframe("togglePlay");
+            showTopbar();
+            return;
+          }
+
+          // Back navigation — double-press
           if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
             e.preventDefault();
-            window.location.href = "/tv";
+
+            if (backPressTimer) {
+              // Second press within window — go back
+              clearTimeout(backPressTimer);
+              backPressTimer = null;
+              goBack();
+              return;
+            }
+
+            // First press — show topbar
+            showTopbar();
+            backPressTimer = setTimeout(function () {
+              backPressTimer = null;
+            }, BACK_DOUBLE_WINDOW);
             return;
           }
 
-          // Enter on back button focuses it and then clicks
+          // Arrow keys / Enter — show topbar, ensure iframe has focus
           if (
-            e.key === "Enter" &&
-            document.activeElement === backBtn
+            e.key === "ArrowUp" ||
+            e.key === "ArrowDown" ||
+            e.key === "ArrowLeft" ||
+            e.key === "ArrowRight" ||
+            e.key === "Enter"
           ) {
-            window.location.href = "/tv";
+            showTopbar();
+
+            if (document.activeElement !== iframe) {
+              iframe.focus();
+            }
+
+            if (playHint.classList.contains("visible")) {
+              hidePlayHint();
+              sendToIframe("play");
+            }
             return;
           }
+
+          // Any other key — show topbar
+          showTopbar();
         });
 
-        document.addEventListener("mousemove", showTopbar);
+        // ── Button handlers ──────────────────────────────────────────────
 
-        backBtn.addEventListener("click", function () {
-          window.location.href = "/tv";
+        backBtn.addEventListener("click", goBack);
+
+        playHint.addEventListener("click", function () {
+          hidePlayHint();
+          sendToIframe("play");
         });
 
-        // Initial show
+        // ── Initialization ───────────────────────────────────────────────
+
         showTopbar();
 
-        // Focus the back button initially so remote can navigate back
+        // Give iframe focus so autoplay has a user-gesture context
         setTimeout(function () {
-          backBtn.focus();
-        }, 500);
+          iframe.focus();
+        }, 100);
+
+        // Fallback: if no ready message after 12s, show play hint
+        setTimeout(function () {
+          if (!playerReady) {
+            showPlayHint();
+          }
+        }, 12000);
       })();
     </script>
   </body>

@@ -49,6 +49,39 @@
         ui: flowplayer.ui.USE_THIN_CONTROLBAR,
       });
 
+      // ── Parent iframe communication (for TV remote support) ───────────
+
+      const isInIframe = window.parent !== window;
+
+      const postToParent = (msg) => {
+        if (isInIframe) {
+          window.parent.postMessage(msg, "*");
+        }
+      };
+
+      // Listen for commands from parent (play, pause, togglePlay)
+      window.addEventListener("message", (e) => {
+        if (!e.data || typeof e.data.type !== "string") return;
+        switch (e.data.type) {
+          case "togglePlay":
+            player.togglePlay();
+            break;
+          case "play":
+            if (player.paused) player.resume();
+            break;
+          case "pause":
+            if (!player.paused) player.pause();
+            break;
+        }
+      });
+
+      // Notify parent on play/pause state changes
+      player.on("resume", () => postToParent({ type: "playing" }));
+      player.on("pause", () => postToParent({ type: "paused" }));
+
+      // Signal ready to parent
+      setTimeout(() => postToParent({ type: "ready" }), 200);
+
       function initDpadRemoteSupport() {
         const playerRoot = document.querySelector(".flowplayer");
         if (!playerRoot) {

@@ -66,6 +66,7 @@
             If no video is provided, the UI will automatically make one inside the container div. -->
       <video
         autoplay
+        playsinline
         data-shaka-player
         id="jiotv_go_player"
         style="width: 100%; height: 100%"
@@ -145,6 +146,59 @@
 
         video.addEventListener("playing", markPlaybackStarted);
         video.addEventListener("loadeddata", markPlaybackStarted);
+
+        // ── Parent iframe communication (for TV remote support) ─────────
+
+        const isInIframe = window.parent !== window;
+
+        const postToParent = (msg) => {
+          if (isInIframe) {
+            window.parent.postMessage(msg, "*");
+          }
+        };
+
+        // Listen for commands from parent (play, pause, togglePlay)
+        window.addEventListener("message", (e) => {
+          if (!e.data || typeof e.data.type !== "string") return;
+          switch (e.data.type) {
+            case "togglePlay":
+              if (video.paused) {
+                video.play().catch(() => {});
+              } else {
+                video.pause();
+              }
+              break;
+            case "play":
+              if (video.paused) video.play().catch(() => {});
+              break;
+            case "pause":
+              if (!video.paused) video.pause();
+              break;
+          }
+        });
+
+        // Handle media keys (TV remote play/pause button)
+        document.addEventListener("keydown", (e) => {
+          if (
+            e.key === "MediaPlayPause" ||
+            e.keyCode === 179 ||
+            e.keyCode === 415
+          ) {
+            e.preventDefault();
+            if (video.paused) {
+              video.play().catch(() => {});
+            } else {
+              video.pause();
+            }
+          }
+        });
+
+        // Notify parent on play/pause state changes
+        video.addEventListener("play", () => postToParent({ type: "playing" }));
+        video.addEventListener("pause", () => postToParent({ type: "paused" }));
+
+        // Signal ready to parent (after all config is set, before load)
+        setTimeout(() => postToParent({ type: "ready" }), 100);
 
         // Default to unmuted playback. If autoplay is blocked, we fallback to muted.
         video.muted = false;
@@ -295,13 +349,13 @@
             video.muted = false;
             await video.play();
           } catch (autoplayError) {
-            // Retry once in muted mode for stricter autoplay policies.
             console.warn("Autoplay blocked, retrying muted", autoplayError);
             video.muted = true;
             try {
               await video.play();
             } catch (retryError) {
               console.warn("Muted autoplay retry failed", retryError);
+              postToParent({ type: "autoplayFailed" });
             }
           }
           console.log("The video has now been loaded!");
