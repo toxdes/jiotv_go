@@ -278,6 +278,22 @@
           },
         });
 
+        // In iframe (TV mode): prevent Shaka Player UI controls from
+        // stealing remote focus. Controls remain visible but unfocusable.
+        if (window.parent !== window) {
+          (function disarmControls() {
+            var btns = document.querySelectorAll(
+              '.shaka-controls-container [role="button"],' +
+              '.shaka-controls-container button,' +
+              '.shaka-controls-container [tabindex]'
+            );
+            for (var i = 0; i < btns.length; i++) {
+              btns[i].setAttribute('tabindex', '-1');
+            }
+            setTimeout(disarmControls, 2000);
+          })();
+        }
+
         const RequestType = shaka.net.NetworkingEngine.RequestType;
         let requestCount = 0;
 

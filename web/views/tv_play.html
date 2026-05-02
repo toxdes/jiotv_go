@@ -245,17 +245,32 @@
             return;
           }
 
-          // Back navigation — double-press
-          if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
+          // Hardware back (remote) — instant go back
+          if (e.key === "GoBack" || e.keyCode === 461) {
+            e.preventDefault();
+            clearTimeout(backPressTimer);
+            backPressTimer = null;
+            goBack();
+            return;
+          }
+
+          // Keyboard Backspace — double-press safety
+          if (e.key === "Backspace") {
             e.preventDefault();
 
             if (backPressTimer) {
-              // Second press within window — go back
               clearTimeout(backPressTimer);
               backPressTimer = null;
               goBack();
               return;
             }
+
+            showTopbar();
+            backPressTimer = setTimeout(function () {
+              backPressTimer = null;
+            }, BACK_DOUBLE_WINDOW);
+            return;
+          }
 
             // First press — show topbar
             showTopbar();

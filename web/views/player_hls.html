@@ -88,6 +88,8 @@
           return false;
         }
 
+        const tvMode = window.parent !== window;
+
         const isArrowKey = (event) => {
           return (
             ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) ||
@@ -109,11 +111,14 @@
               '.fp-ui [role="button"], .fp-ui .fp-play, .fp-ui .fp-pause'
             )
           );
-          controls.forEach((control) => {
-            if (!control.hasAttribute("tabindex") || control.getAttribute("tabindex") === "-1") {
-              control.setAttribute("tabindex", "0");
-            }
-          });
+          // In TV iframe mode, don't make controls focusable
+          if (!tvMode) {
+            controls.forEach((control) => {
+              if (!control.hasAttribute("tabindex") || control.getAttribute("tabindex") === "-1") {
+                control.setAttribute("tabindex", "0");
+              }
+            });
+          }
           return controls;
         };
 
@@ -125,6 +130,7 @@
         };
 
         const focusPlayPauseControl = () => {
+          if (tvMode) return false;
           const controls = getFocusableControls();
           const target = getPlayPauseControl() || controls[0];
           if (!target) {
@@ -144,9 +150,11 @@
           if (isMediaToggleKey(event)) {
             event.preventDefault();
             player.togglePlay();
-            focusPlayPauseControl();
+            if (!tvMode) focusPlayPauseControl();
             return;
           }
+
+          if (tvMode) return;
 
           if (isArrowKey(event) && !isInsidePlayer(document.activeElement)) {
             if (focusPlayPauseControl()) {
