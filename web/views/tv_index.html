@@ -54,7 +54,6 @@
         font-weight: 700;
         color: var(--tv-accent);
         white-space: nowrap;
-        flex: 1;
       }
 
       .tv-fav-btn {
@@ -190,10 +189,27 @@
         display: block;
       }
 
+      #tv-player-overlay.active #tv-player-chan-label {
+        display: block;
+      }
+
       #tv-player-iframe {
         width: 100%;
         height: 100%;
         border: none;
+      }
+
+      #tv-player-chan-label {
+        position: fixed;
+        top: 1rem;
+        left: 1rem;
+        z-index: 300;
+        color: #fff;
+        font-size: 1.4rem;
+        font-weight: 600;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        display: none;
+        pointer-events: none;
       }
 
       @media (min-width: 1920px) {
@@ -251,6 +267,7 @@
 
     <div id="tv-player-overlay">
       <iframe id="tv-player-iframe" allow="autoplay; fullscreen" allowfullscreen webkitallowfullscreen></iframe>
+      <div id="tv-player-chan-label"></div>
     </div>
 
     <script src="/static/internal/tv.js"></script>

@@ -8,6 +8,7 @@
   var noResults = document.getElementById("tv-no-results");
   var playerOverlay = document.getElementById("tv-player-overlay");
   var playerIframe = document.getElementById("tv-player-iframe");
+  var chanLabel = document.getElementById("tv-player-chan-label");
 
   if (!grid) return;
 
@@ -26,8 +27,9 @@
   // ── SPA: player overlay ───────────────────────────────────────────────
 
   function openChannel(card) {
-    var href = card.getAttribute("href");
-    if (!href) return;
+    var id = card.getAttribute("data-channel-id");
+    var name = card.getAttribute("data-channel-name") || id;
+    var url = "/mpd/" + id + "?q=auto";
 
     // Find the real index of this card
     for (var i = 0; i < allCards.length; i++) {
@@ -41,9 +43,10 @@
     playerOpen = true;
     playerOverlay.classList.add("active");
     document.body.style.overflow = "hidden";
-    playerIframe.src = href;
+    if (chanLabel) chanLabel.textContent = name;
+    playerIframe.src = url;
 
-    history.pushState({ overlay: true }, "", href);
+    history.pushState({ overlay: true }, "", "/tv/play/" + id + "?name=" + encodeURIComponent(name));
 
     setTimeout(function () {
       playerIframe.focus();
@@ -55,6 +58,7 @@
     playerOverlay.classList.remove("active");
     document.body.style.overflow = "";
     playerIframe.src = "";
+    if (chanLabel) chanLabel.textContent = "";
 
     history.replaceState(null, "", "/tv");
 
@@ -122,7 +126,7 @@
     return visibleIndices.indexOf(realIndex);
   }
 
-  // ── Click delegation for cards (SPA: open overlay instead of navigate) ─
+  // ── Click delegation (SPA: open overlay instead of navigate) ───────────
 
   grid.addEventListener("click", function (e) {
     var card = e.target.closest(".tv-card");
@@ -163,7 +167,7 @@
         if (row > 0) return Math.max(visIndex - cols, 0);
         break;
     }
-    return visIndex;
+    return -1; // can't move in this direction
   }
 
   function focusCardByIndex(realIndex) {
@@ -191,10 +195,8 @@
     if (visibleIndices.length === 0) return;
 
     if (playerOpen) {
-      // Find the currently playing card in the visible list
       var playVisIdx = indexInVisible(playingCardIndex);
       if (playVisIdx < 0) {
-        // Current card may be hidden (fav filter), find nearest
         for (var i = 0; i < visibleIndices.length; i++) {
           if (visibleIndices[i] >= playingCardIndex) {
             playVisIdx = i;
@@ -213,7 +215,6 @@
 
       openChannel(allCards[visibleIndices[nextVis]]);
     } else {
-      // On grid: move focus down/up a row
       var visIdx = getFocusedVisibleIndex();
       if (visIdx < 0) {
         focusFirstVisible();
@@ -262,7 +263,6 @@
     if (active) {
       applyFavFilter();
     } else {
-      // Unhide all cards and rebuild
       for (var i = 0; i < allCards.length; i++) {
         allCards[i].classList.remove("hidden");
       }
@@ -333,13 +333,6 @@
     numOverlay.style.display = "none";
   }
 
-  function resetNumBuffer() {
-    numBuffer = "";
-    clearTimeout(numTimer);
-    numTimer = null;
-    hideNumOverlay();
-  }
-
   function commitNumBuffer() {
     if (numBuffer.length === 0) return;
     var targetId = numBuffer.replace(/^0+/, "") || "0";
@@ -354,9 +347,23 @@
     }
   }
 
+  function resetNumBuffer() {
+    numBuffer = "";
+    clearTimeout(numTimer);
+    numTimer = null;
+    hideNumOverlay();
+  }
+
   // ── Global Keyboard Handling ───────────────────────────────────────────
 
   document.addEventListener("keydown", function (e) {
+    // ── Yellow key toggles favorites ──────────────────────────────────
+    if (e.key === "Yellow" || e.key === "F2" || e.keyCode === 459) {
+      e.preventDefault();
+      toggleFav();
+      return;
+    }
+
     // ── SPA: Back key handling ───────────────────────────────────────
     if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
       if (playerOpen) {
@@ -366,7 +373,7 @@
       }
     }
 
-    // ── Channel Up/Down (works in grid and player) ────────────────────
+    // ── Channel Up/Down ──────────────────────────────────────────────
     if (e.key === "ChannelUp" || e.keyCode === 427) {
       e.preventDefault();
       surfChannel("up");
@@ -378,7 +385,20 @@
       return;
     }
 
-    if (playerOpen) return; // let iframe handle all other keys
+    if (playerOpen) return;
+
+    // ── Fav button arrow navigation ───────────────────────────────────
+    if (document.activeElement === favBtn) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        focusFirstVisible();
+        return;
+      }
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        // Keep focus on fav button — ignore other directions
+        return;
+      }
+    }
 
     // ── Grid keys ────────────────────────────────────────────────────
 
@@ -430,8 +450,11 @@
       }
 
       var nextVis = getAdjacentCell(visIdx, e.key);
-      if (nextVis >= 0 && nextVis < visibleIndices.length) {
+      if (nextVis >= 0) {
         focusCardByIndex(visibleIndices[nextVis]);
+      } else if (e.key === "ArrowUp" && favBtn) {
+        // Can't go up further — focus fav button
+        favBtn.focus();
       }
       return;
     }
