@@ -209,6 +209,9 @@
 
     rebuildVisible();
 
+    // Re-apply fav filter after search (they compose)
+    if (favActive) applyFavFilterSilent();
+
     currentIndex = -1;
     if (visibleIndices.length > 0) {
       focusCardByIndex(visibleIndices[0]);
@@ -247,6 +250,102 @@
         allCards[i].setAttribute("href", base + "?q=" + encodeURIComponent(quality));
       }
     });
+  }
+
+  // ── Favorites Toggle ────────────────────────────────────────────────────
+
+  var favBtn = document.getElementById("tv-fav-btn");
+  var favActive = false;
+  var FAV_TOGGLE_KEY = "tvFavFilter";
+  var FAV_CHANNELS_KEY = "favoriteChannels";
+
+  function getFavIds() {
+    try {
+      var raw = localStorage.getItem(FAV_CHANNELS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function setFavActive(active) {
+    favActive = active;
+    if (favBtn) {
+      if (active) {
+        favBtn.classList.add("active");
+        favBtn.querySelector("svg").setAttribute("fill", "currentColor");
+      } else {
+        favBtn.classList.remove("active");
+        favBtn.querySelector("svg").setAttribute("fill", "none");
+      }
+    }
+    localStorage.setItem(FAV_TOGGLE_KEY, active ? "1" : "0");
+    // When toggling off, re-apply search to unhide non-favs;
+    // when toggling on, applyFavFilter hides them.
+    if (active) {
+      applyFavFilter();
+    } else {
+      applySearch(lastSearchQuery);
+    }
+  }
+
+  function toggleFav() {
+    setFavActive(!favActive);
+  }
+
+  function applyFavFilter() {
+    if (favActive) {
+      var favIds = getFavIds();
+      var favSet = Object.create(null);
+      for (var i = 0; i < favIds.length; i++) {
+        favSet[favIds[i]] = true;
+      }
+      for (var i = 0; i < allCards.length; i++) {
+        if (!favSet[allCards[i].getAttribute("data-channel-id")]) {
+          allCards[i].classList.add("hidden");
+        }
+      }
+    }
+    // When toggling off, re-apply search to unhide non-favs
+    // rebuildVisible handles the hidden state from both filters
+    rebuildVisible();
+    currentIndex = -1;
+    if (visibleIndices.length > 0) {
+      focusCardByIndex(visibleIndices[0]);
+    }
+  }
+
+  function applyFavFilterSilent() {
+    var favIds = getFavIds();
+    var favSet = Object.create(null);
+    for (var i = 0; i < favIds.length; i++) {
+      favSet[favIds[i]] = true;
+    }
+    for (var i = 0; i < allCards.length; i++) {
+      if (!favSet[allCards[i].getAttribute("data-channel-id")]) {
+        allCards[i].classList.add("hidden");
+      }
+    }
+    rebuildVisible();
+  }
+
+  if (favBtn) {
+    favBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      toggleFav();
+    });
+
+    favBtn.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleFav();
+      }
+    });
+  }
+
+  // Restore fav toggle state from localStorage
+  if (localStorage.getItem(FAV_TOGGLE_KEY) === "1") {
+    setFavActive(true);
   }
 
   // ── Channel Number Typing ──────────────────────────────────────────────
