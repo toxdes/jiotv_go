@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ .Title }}</title>
+    <link href="/static/internal/tailwind.css" rel="stylesheet" />
+    <style>
+      :root {
+        --tv-card-size: 160px;
+        --tv-gap: 1rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background-color: #0d1117;
+        color: #e6edf3;
+        font-family: system-ui, -apple-system, sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      .tv-header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: linear-gradient(180deg, #0d1117 70%, transparent);
+        padding: 1.25rem 2rem 0.75rem;
+      }
+
+      .tv-header-inner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        max-width: 1800px;
+        margin: 0 auto;
+      }
+
+      .tv-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #ea4335;
+        white-space: nowrap;
+      }
+
+      .tv-search {
+        flex: 1;
+        max-width: 420px;
+        height: 3rem;
+        padding: 0 1.25rem;
+        border: 2px solid #30363d;
+        border-radius: 0.75rem;
+        background: #161b22;
+        color: #e6edf3;
+        font-size: 1.1rem;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      .tv-search:focus {
+        border-color: #ea4335;
+      }
+
+      .tv-quality-select {
+        height: 3rem;
+        padding: 0 1rem;
+        border: 2px solid #30363d;
+        border-radius: 0.75rem;
+        background: #161b22;
+        color: #e6edf3;
+        font-size: 1.1rem;
+        outline: none;
+        cursor: pointer;
+      }
+
+      .tv-quality-select:focus {
+        border-color: #ea4335;
+      }
+
+      .tv-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: var(--tv-gap);
+        padding: 1rem 2rem 3rem;
+        max-width: 1800px;
+        margin: 0 auto;
+      }
+
+      .tv-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.25rem 0.75rem;
+        border: 3px solid transparent;
+        border-radius: 1rem;
+        background: #161b22;
+        text-decoration: none;
+        color: inherit;
+        outline: none;
+        transition: border-color 0.15s, background-color 0.15s, transform 0.1s;
+        cursor: pointer;
+        min-height: var(--tv-card-size);
+      }
+
+      .tv-card:focus {
+        border-color: #ea4335;
+        background: #1c2333;
+        transform: scale(1.06);
+      }
+
+      .tv-card-logo {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        object-fit: contain;
+        background: #21262d;
+        flex-shrink: 0;
+      }
+
+      .tv-card-name {
+        font-size: 1.05rem;
+        font-weight: 600;
+        text-align: center;
+        line-height: 1.3;
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .tv-card-id {
+        font-size: 0.75rem;
+        opacity: 0.4;
+      }
+
+      .tv-no-results {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 3rem;
+        font-size: 1.25rem;
+        opacity: 0.5;
+      }
+
+      .tv-focus-guide {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 999;
+      }
+
+      @media (min-width: 1920px) {
+        .tv-grid {
+          grid-template-columns: repeat(7, 1fr);
+        }
+      }
+
+      @media (min-width: 1400px) and (max-width: 1919px) {
+        .tv-grid {
+          grid-template-columns: repeat(6, 1fr);
+        }
+      }
+
+      @media (min-width: 1100px) and (max-width: 1399px) {
+        .tv-grid {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="tv-header">
+      <div class="tv-header-inner">
+        <div class="tv-title">{{ .Title }}</div>
+        <input
+          id="tv-search-input"
+          type="text"
+          class="tv-search"
+          placeholder="Search channels..."
+          autocomplete="off"
+          inputmode="search"
+        />
+        <select id="tv-quality-select" class="tv-quality-select">
+          {{ range $key, $value := .Qualities }}
+          <option value="{{ $key }}">{{ $value }}</option>
+          {{ end }}
+        </select>
+      </div>
+    </div>
+
+    <div id="tv-num-overlay" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(234,67,53,0.9); color:#fff; font-size:3rem; font-weight:700; padding:1rem 2rem; border-radius:1rem; z-index:999; pointer-events:none; text-shadow:0 2px 4px rgba(0,0,0,0.4);">
+    </div>
+
+    <div id="tv-channel-grid" class="tv-grid">
+      {{range $channel := .Channels}}
+      <a
+        href="/tv/play/{{ $channel.ID }}?name={{ urlquery $channel.Name }}"
+        class="tv-card"
+        data-channel-id="{{ $channel.ID }}"
+        data-channel-name="{{ $channel.Name }}"
+        tabindex="0"
+      >
+        <img
+          src="{{ $channel.LogoURL }}"
+          alt="{{ $channel.Name }}"
+          class="tv-card-logo"
+          loading="lazy"
+        />
+        <span class="tv-card-name">{{ $channel.Name }}</span>
+        <span class="tv-card-id">ID:{{ $channel.ID }}</span>
+      </a>
+      {{end}}
+      <div id="tv-no-results" class="tv-no-results" style="display:none">No channels found</div>
+    </div>
+
+    <script src="/static/internal/tv.js"></script>
+  </body>
+</html>

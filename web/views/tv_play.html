@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ .Title }} - {{ .ChannelName }}</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: #000;
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      .tv-player-wrapper {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .tv-player-wrapper iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+
+      .tv-player-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        pointer-events: none;
+        z-index: 100;
+      }
+
+      .tv-player-topbar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      .tv-player-topbar.visible {
+        opacity: 1;
+      }
+
+      .tv-back-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        height: 2.75rem;
+        padding: 0 1.25rem;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 0.75rem;
+        background: rgba(0,0,0,0.5);
+        color: #fff;
+        font-size: 1.05rem;
+        font-weight: 600;
+        cursor: pointer;
+        pointer-events: auto;
+        outline: none;
+        transition: border-color 0.15s, background 0.15s;
+      }
+
+      .tv-back-btn:focus {
+        border-color: #ea4335;
+        background: rgba(234, 67, 53, 0.2);
+      }
+
+      .tv-back-btn svg {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
+      .tv-chan-name {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        pointer-events: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="tv-player-wrapper">
+      <iframe
+        src="{{ .player_url }}"
+        allow="autoplay; fullscreen"
+        allowfullscreen
+        webkitallowfullscreen
+        mozallowfullscreen
+      ></iframe>
+    </div>
+
+    <div id="tv-player-overlay" class="tv-player-overlay">
+      <div id="tv-player-topbar" class="tv-player-topbar">
+        <button id="tv-back-btn" class="tv-back-btn" tabindex="0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+          Back
+        </button>
+        <span class="tv-chan-name">{{ .ChannelName }}</span>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var topbar = document.getElementById("tv-player-topbar");
+        var backBtn = document.getElementById("tv-back-btn");
+        var hideTimer = null;
+        var visible = true;
+
+        function showTopbar() {
+          topbar.classList.add("visible");
+          visible = true;
+          clearTimeout(hideTimer);
+          hideTimer = setTimeout(function () {
+            topbar.classList.remove("visible");
+            visible = false;
+          }, 5000);
+        }
+
+        function hideTopbar() {
+          topbar.classList.remove("visible");
+          visible = false;
+          clearTimeout(hideTimer);
+        }
+
+        // Show topbar on any user interaction
+        document.addEventListener("keydown", function (e) {
+          showTopbar();
+
+          // Back navigation
+          if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
+            e.preventDefault();
+            window.location.href = "/tv";
+            return;
+          }
+
+          // Enter on back button focuses it and then clicks
+          if (
+            e.key === "Enter" &&
+            document.activeElement === backBtn
+          ) {
+            window.location.href = "/tv";
+            return;
+          }
+        });
+
+        document.addEventListener("mousemove", showTopbar);
+
+        backBtn.addEventListener("click", function () {
+          window.location.href = "/tv";
+        });
+
+        // Initial show
+        showTopbar();
+
+        // Focus the back button initially so remote can navigate back
+        setTimeout(function () {
+          backBtn.focus();
+        }, 500);
+      })();
+    </script>
+  </body>
+</html>
