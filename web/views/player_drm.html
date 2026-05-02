@@ -368,11 +368,15 @@
           video.muted = true;
           await video.play();
 
-          // Unmute once playback starts
-          video.addEventListener("playing", function onPlaying() {
-            video.muted = false;
-            video.play().catch(function () {});
-          }, { once: true });
+          // Unmute on first user gesture (key press from remote)
+          var unmuteOnGesture = function (e) {
+            if (video.muted) {
+              video.muted = false;
+              video.play().catch(function () {});
+            }
+            document.removeEventListener("keydown", unmuteOnGesture);
+          };
+          document.addEventListener("keydown", unmuteOnGesture);
 
           console.log("The video has now been loaded!");
         } catch (e) {

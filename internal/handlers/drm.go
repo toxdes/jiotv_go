@@ -514,8 +514,9 @@ func MpdHandler(c *fiber.Ctx) error {
 	}
 	parsedUrl, err := url.Parse(decryptedUrl)
 	if err != nil {
-		utils.Log.Panicln(err)
-		return err
+		utils.Log.Println("Failed to parse decrypted MPD URL:", err)
+		c.Status(fiber.StatusInternalServerError)
+		return fmt.Errorf("invalid auth token: %w", err)
 	}
 
 	if channelID != "" {
