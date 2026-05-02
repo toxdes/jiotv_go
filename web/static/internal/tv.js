@@ -5,8 +5,6 @@
   "use strict";
 
   var grid = document.getElementById("tv-channel-grid");
-  var searchInput = document.getElementById("tv-search-input");
-  var qualitySelect = document.getElementById("tv-quality-select");
   var noResults = document.getElementById("tv-no-results");
   var playerOverlay = document.getElementById("tv-player-overlay");
   var playerIframe = document.getElementById("tv-player-iframe");
@@ -23,6 +21,7 @@
   var resizeTimer = null;
   var playerOpen = false;
   var lastFocusedIndex = -1;
+  var playingCardIndex = -1;
 
   // ── SPA: player overlay ───────────────────────────────────────────────
 
@@ -30,13 +29,20 @@
     var href = card.getAttribute("href");
     if (!href) return;
 
+    // Find the real index of this card
+    for (var i = 0; i < allCards.length; i++) {
+      if (allCards[i] === card) {
+        playingCardIndex = i;
+        break;
+      }
+    }
+
     lastFocusedIndex = currentIndex;
     playerOpen = true;
     playerOverlay.classList.add("active");
     document.body.style.overflow = "hidden";
     playerIframe.src = href;
 
-    // Update URL so browser back works
     history.pushState({ overlay: true }, "", href);
 
     setTimeout(function () {
@@ -50,10 +56,8 @@
     document.body.style.overflow = "";
     playerIframe.src = "";
 
-    // Restore URL
     history.replaceState(null, "", "/tv");
 
-    // Refocus the grid
     setTimeout(function () {
       if (lastFocusedIndex >= 0 && allCards[lastFocusedIndex]) {
         focusCardByIndex(lastFocusedIndex);
@@ -181,75 +185,49 @@
     return indexInVisible(currentIndex);
   }
 
-  // ── Search (debounced with rAF) ────────────────────────────────────────
+  // ── Channel Surfing (ChannelUp / ChannelDown) ──────────────────────────
 
-  var searchRaf = null;
-  var lastSearchQuery = "";
+  function surfChannel(direction) {
+    if (visibleIndices.length === 0) return;
 
-  function applySearch(query) {
-    if (query === lastSearchQuery) return;
-    lastSearchQuery = query;
-
-    var q = query.toLowerCase().trim();
-
-    for (var i = 0; i < allCards.length; i++) {
-      var card = allCards[i];
-      if (!q) {
-        card.classList.remove("hidden");
-      } else {
-        var name = (card.getAttribute("data-channel-name") || "").toLowerCase();
-        var id = (card.getAttribute("data-channel-id") || "").toLowerCase();
-        if (name.indexOf(q) !== -1 || id.indexOf(q) !== -1) {
-          card.classList.remove("hidden");
-        } else {
-          card.classList.add("hidden");
+    if (playerOpen) {
+      // Find the currently playing card in the visible list
+      var playVisIdx = indexInVisible(playingCardIndex);
+      if (playVisIdx < 0) {
+        // Current card may be hidden (fav filter), find nearest
+        for (var i = 0; i < visibleIndices.length; i++) {
+          if (visibleIndices[i] >= playingCardIndex) {
+            playVisIdx = i;
+            break;
+          }
         }
+        if (playVisIdx < 0) playVisIdx = 0;
       }
-    }
 
-    rebuildVisible();
+      var nextVis;
+      if (direction === "up") {
+        nextVis = playVisIdx > 0 ? playVisIdx - 1 : visibleIndices.length - 1;
+      } else {
+        nextVis = playVisIdx < visibleIndices.length - 1 ? playVisIdx + 1 : 0;
+      }
 
-    // Re-apply fav filter after search (they compose)
-    if (favActive) applyFavFilterSilent();
-
-    currentIndex = -1;
-    if (visibleIndices.length > 0) {
-      focusCardByIndex(visibleIndices[0]);
-    } else if (searchInput && document.activeElement !== searchInput) {
-      searchInput.focus();
-    }
-  }
-
-  if (searchInput) {
-    searchInput.addEventListener("input", function () {
-      var self = this;
-      if (searchRaf) cancelAnimationFrame(searchRaf);
-      searchRaf = requestAnimationFrame(function () {
-        applySearch(self.value);
-      });
-    });
-
-    searchInput.addEventListener("keydown", function (e) {
-      if (e.key === "ArrowDown" || e.key === "Enter") {
-        e.preventDefault();
+      openChannel(allCards[visibleIndices[nextVis]]);
+    } else {
+      // On grid: move focus down/up a row
+      var visIdx = getFocusedVisibleIndex();
+      if (visIdx < 0) {
         focusFirstVisible();
+        return;
       }
-    });
-  }
 
-  // ── Quality Select ─────────────────────────────────────────────────────
-
-  if (qualitySelect) {
-    qualitySelect.addEventListener("change", function () {
-      var quality = this.value;
-      for (var i = 0; i < allCards.length; i++) {
-        var href = allCards[i].getAttribute("href");
-        if (!href) continue;
-        var idx = href.indexOf("?");
-        var base = idx >= 0 ? href.substring(0, idx) : href;
-        allCards[i].setAttribute("href", base + "?q=" + encodeURIComponent(quality));
+      var nextVis;
+      if (direction === "up") {
+        nextVis = Math.max(0, visIdx - cols);
+      } else {
+        nextVis = Math.min(visibleIndices.length - 1, visIdx + cols);
       }
-    });
+      focusCardByIndex(visibleIndices[nextVis]);
+    }
   }
 
   // ── Favorites Toggle ────────────────────────────────────────────────────
@@ -280,12 +258,19 @@
       }
     }
     localStorage.setItem(FAV_TOGGLE_KEY, active ? "1" : "0");
-    // When toggling off, re-apply search to unhide non-favs;
-    // when toggling on, applyFavFilter hides them.
+
     if (active) {
       applyFavFilter();
     } else {
-      applySearch(lastSearchQuery);
+      // Unhide all cards and rebuild
+      for (var i = 0; i < allCards.length; i++) {
+        allCards[i].classList.remove("hidden");
+      }
+      rebuildVisible();
+      currentIndex = -1;
+      if (visibleIndices.length > 0) {
+        focusCardByIndex(visibleIndices[0]);
+      }
     }
   }
 
@@ -294,28 +279,6 @@
   }
 
   function applyFavFilter() {
-    if (favActive) {
-      var favIds = getFavIds();
-      var favSet = Object.create(null);
-      for (var i = 0; i < favIds.length; i++) {
-        favSet[favIds[i]] = true;
-      }
-      for (var i = 0; i < allCards.length; i++) {
-        if (!favSet[allCards[i].getAttribute("data-channel-id")]) {
-          allCards[i].classList.add("hidden");
-        }
-      }
-    }
-    // When toggling off, re-apply search to unhide non-favs
-    // rebuildVisible handles the hidden state from both filters
-    rebuildVisible();
-    currentIndex = -1;
-    if (visibleIndices.length > 0) {
-      focusCardByIndex(visibleIndices[0]);
-    }
-  }
-
-  function applyFavFilterSilent() {
     var favIds = getFavIds();
     var favSet = Object.create(null);
     for (var i = 0; i < favIds.length; i++) {
@@ -327,6 +290,10 @@
       }
     }
     rebuildVisible();
+    currentIndex = -1;
+    if (visibleIndices.length > 0) {
+      focusCardByIndex(visibleIndices[0]);
+    }
   }
 
   if (favBtn) {
@@ -390,8 +357,6 @@
   // ── Global Keyboard Handling ───────────────────────────────────────────
 
   document.addEventListener("keydown", function (e) {
-    var tag = document.activeElement ? document.activeElement.tagName : "";
-
     // ── SPA: Back key handling ───────────────────────────────────────
     if (e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 461) {
       if (playerOpen) {
@@ -399,20 +364,23 @@
         closeChannel();
         return;
       }
-      // If on grid and nothing to go back to, do nothing (app is root)
-      // WebOS will handle system-level back
+    }
+
+    // ── Channel Up/Down (works in grid and player) ────────────────────
+    if (e.key === "ChannelUp" || e.keyCode === 427) {
+      e.preventDefault();
+      surfChannel("up");
+      return;
+    }
+    if (e.key === "ChannelDown" || e.keyCode === 428) {
+      e.preventDefault();
+      surfChannel("down");
+      return;
     }
 
     if (playerOpen) return; // let iframe handle all other keys
 
     // ── Grid keys ────────────────────────────────────────────────────
-
-    if (tag === "INPUT" || tag === "TEXTAREA") {
-      if (tag === "INPUT" && e.key === "Escape") {
-        document.activeElement.blur();
-      }
-      return;
-    }
 
     // Digit keys — channel number typing
     if (e.key >= "0" && e.key <= "9") {

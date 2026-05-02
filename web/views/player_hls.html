@@ -49,6 +49,9 @@
         ui: flowplayer.ui.USE_THIN_CONTROLBAR,
       });
 
+      // Max volume by default
+      player.volumeLevel = 1;
+
       // ── Parent iframe communication (for TV remote support) ───────────
 
       const isInIframe = window.parent !== window;

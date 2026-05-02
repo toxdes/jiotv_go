@@ -54,36 +54,8 @@
         font-weight: 700;
         color: var(--tv-accent);
         white-space: nowrap;
-      }
-
-      .tv-search {
         flex: 1;
-        max-width: 420px;
-        height: 3rem;
-        padding: 0 1.25rem;
-        border: 2px solid var(--tv-border);
-        border-radius: 0.75rem;
-        background: var(--tv-card-bg);
-        color: var(--tv-text);
-        font-size: 1.1rem;
-        outline: none;
       }
-
-      .tv-search:focus { border-color: var(--tv-accent); }
-
-      .tv-quality-select {
-        height: 3rem;
-        padding: 0 1rem;
-        border: 2px solid var(--tv-border);
-        border-radius: 0.75rem;
-        background: var(--tv-card-bg);
-        color: var(--tv-text);
-        font-size: 1.1rem;
-        outline: none;
-        cursor: pointer;
-      }
-
-      .tv-quality-select:focus { border-color: var(--tv-accent); }
 
       .tv-fav-btn {
         display: flex;
@@ -179,8 +151,23 @@
       }
 
       .tv-card-id {
-        font-size: 0.75rem;
-        opacity: 0.4;
+        position: absolute;
+        top: 0.4rem;
+        left: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        opacity: 0.5;
+        line-height: 1;
+      }
+
+      .tv-card-num {
+        font-size: 1.8rem;
+        font-weight: 800;
+        opacity: 0.25;
+        line-height: 1;
+        position: absolute;
+        right: 0.5rem;
+        bottom: 0.3rem;
       }
 
       .tv-no-results {
@@ -227,24 +214,11 @@
     <div class="tv-header">
       <div class="tv-header-inner">
         <div class="tv-title">{{ .Title }}</div>
-        <input
-          id="tv-search-input"
-          type="text"
-          class="tv-search"
-          placeholder="Search channels..."
-          autocomplete="off"
-          inputmode="search"
-        />
         <button id="tv-fav-btn" class="tv-fav-btn" title="Toggle favorites" tabindex="0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
           </svg>
         </button>
-        <select id="tv-quality-select" class="tv-quality-select">
-          {{ range $key, $value := .Qualities }}
-          <option value="{{ $key }}">{{ $value }}</option>
-          {{ end }}
-        </select>
       </div>
     </div>
 
@@ -268,7 +242,8 @@
           decoding="async"
         />
         <span class="tv-card-name">{{ $channel.Name }}</span>
-        <span class="tv-card-id">ID:{{ $channel.ID }}</span>
+        <span class="tv-card-id">{{ $channel.ID }}</span>
+        <span class="tv-card-num">{{ $channel.ID }}</span>
       </a>
       {{end}}
       <div id="tv-no-results" class="tv-no-results" style="display:none">No channels found</div>
