@@ -49,41 +49,8 @@
         ui: flowplayer.ui.USE_THIN_CONTROLBAR,
       });
 
-      // Max volume by default
+      // JTV: max volume for TV remote usage
       player.volumeLevel = 1;
-
-      // ── Parent iframe communication (for TV remote support) ───────────
-
-      const isInIframe = window.parent !== window;
-
-      const postToParent = (msg) => {
-        if (isInIframe) {
-          window.parent.postMessage(msg, "*");
-        }
-      };
-
-      // Listen for commands from parent (play, pause, togglePlay)
-      window.addEventListener("message", (e) => {
-        if (!e.data || typeof e.data.type !== "string") return;
-        switch (e.data.type) {
-          case "togglePlay":
-            player.togglePlay();
-            break;
-          case "play":
-            if (player.paused) player.resume();
-            break;
-          case "pause":
-            if (!player.paused) player.pause();
-            break;
-        }
-      });
-
-      // Notify parent on play/pause state changes
-      player.on("resume", () => postToParent({ type: "playing" }));
-      player.on("pause", () => postToParent({ type: "paused" }));
-
-      // Signal ready to parent
-      setTimeout(() => postToParent({ type: "ready" }), 200);
 
       function initDpadRemoteSupport() {
         const playerRoot = document.querySelector(".flowplayer");
@@ -91,6 +58,7 @@
           return false;
         }
 
+        // JTV: skip control focus in TV iframe mode
         const tvMode = window.parent !== window;
 
         const isArrowKey = (event) => {
@@ -114,7 +82,7 @@
               '.fp-ui [role="button"], .fp-ui .fp-play, .fp-ui .fp-pause'
             )
           );
-          // In TV iframe mode, don't make controls focusable
+          // JTV: don't make controls focusable in TV iframe mode
           if (!tvMode) {
             controls.forEach((control) => {
               if (!control.hasAttribute("tabindex") || control.getAttribute("tabindex") === "-1") {
@@ -132,6 +100,7 @@
           );
         };
 
+        // JTV: skip control focus in TV iframe mode
         const focusPlayPauseControl = () => {
           if (tvMode) return false;
           const controls = getFocusableControls();
@@ -153,10 +122,12 @@
           if (isMediaToggleKey(event)) {
             event.preventDefault();
             player.togglePlay();
+            // JTV: skip control focus in TV iframe mode
             if (!tvMode) focusPlayPauseControl();
             return;
           }
 
+          // JTV: skip arrow key control navigation in TV iframe mode
           if (tvMode) return;
 
           if (isArrowKey(event) && !isInsidePlayer(document.activeElement)) {
@@ -218,5 +189,7 @@
         }
       });
     </script>
+    <!-- JTV: TV remote support (self-guarding, no-op on desktop) -->
+    <script src="/static/internal/player_tv.js"></script>
   </body>
 </html>

@@ -64,6 +64,7 @@
     <div data-shaka-player-container>
       <!-- The data-shaka-player tag will make the UI library use this video element.
             If no video is provided, the UI will automatically make one inside the container div. -->
+      <!-- JTV: playsinline added for WebOS/iframe auto-play policy -->
       <video
         autoplay
         playsinline
@@ -147,63 +148,8 @@
         video.addEventListener("playing", markPlaybackStarted);
         video.addEventListener("loadeddata", markPlaybackStarted);
 
-        // ── Parent iframe communication (for TV remote support) ─────────
-
-        const isInIframe = window.parent !== window;
-
-        const postToParent = (msg) => {
-          if (isInIframe) {
-            window.parent.postMessage(msg, "*");
-          }
-        };
-
-        // Listen for commands from parent (play, pause, togglePlay)
-        window.addEventListener("message", (e) => {
-          if (!e.data || typeof e.data.type !== "string") return;
-          switch (e.data.type) {
-            case "togglePlay":
-              if (video.paused) {
-                video.play().catch(() => {});
-              } else {
-                video.pause();
-              }
-              break;
-            case "play":
-              if (video.paused) video.play().catch(() => {});
-              break;
-            case "pause":
-              if (!video.paused) video.pause();
-              break;
-          }
-        });
-
-        // Handle media keys (TV remote play/pause button)
-        document.addEventListener("keydown", (e) => {
-          if (
-            e.key === "MediaPlayPause" ||
-            e.keyCode === 179 ||
-            e.keyCode === 415
-          ) {
-            e.preventDefault();
-            if (video.paused) {
-              video.play().catch(() => {});
-            } else {
-              video.pause();
-            }
-          }
-        });
-
-        // Notify parent on play/pause state changes
-        video.addEventListener("play", () => postToParent({ type: "playing" }));
-        video.addEventListener("pause", () => postToParent({ type: "paused" }));
-
-        // Signal ready to parent (after all config is set, before load)
-        setTimeout(() => postToParent({ type: "ready" }), 100);
-
-        // Start muted for autoplay policy compliance (required on WebOS / strict browsers).
-        // Unmute automatically once playback begins.
-        video.muted = true;
-        video.volume = 1.0;
+        // Default to unmuted playback. If autoplay is blocked, we fallback to muted.
+        video.muted = false;
 
         // Enhanced error handler with recovery logic
         player.addEventListener("error", (event) => {
@@ -280,22 +226,6 @@
           },
         });
 
-        // In iframe (TV mode): prevent Shaka Player UI controls from
-        // stealing remote focus. Controls remain visible but unfocusable.
-        if (window.parent !== window) {
-          (function disarmControls() {
-            var btns = document.querySelectorAll(
-              '.shaka-controls-container [role="button"],' +
-              '.shaka-controls-container button,' +
-              '.shaka-controls-container [tabindex]'
-            );
-            for (var i = 0; i < btns.length; i++) {
-              btns[i].setAttribute('tabindex', '-1');
-            }
-            setTimeout(disarmControls, 2000);
-          })();
-        }
-
         const RequestType = shaka.net.NetworkingEngine.RequestType;
         let requestCount = 0;
 
@@ -363,21 +293,19 @@
 
         try {
           await player.load("{{ .play_url }}");
-
-          // Muted autoplay (required on TVs/strict browsers)
-          video.muted = true;
-          await video.play();
-
-          // Unmute on first user gesture (key press from remote)
-          var unmuteOnGesture = function (e) {
-            if (video.muted) {
-              video.muted = false;
-              video.play().catch(function () {});
+          try {
+            video.muted = false;
+            await video.play();
+          } catch (autoplayError) {
+            // Retry once in muted mode for stricter autoplay policies.
+            console.warn("Autoplay blocked, retrying muted", autoplayError);
+            video.muted = true;
+            try {
+              await video.play();
+            } catch (retryError) {
+              console.warn("Muted autoplay retry failed", retryError);
             }
-            document.removeEventListener("keydown", unmuteOnGesture);
-          };
-          document.addEventListener("keydown", unmuteOnGesture);
-
+          }
           console.log("The video has now been loaded!");
         } catch (e) {
           console.error("Error loading video", e);
@@ -405,7 +333,7 @@
 
         unmuteBtn.addEventListener("click", () => {
           video.muted = false;
-          video.volume = 1.0;
+          video.volume = 0.8; // Set to 80% volume
           updateUnmuteButton();
         });
 
@@ -446,5 +374,7 @@
         });
       });
     </script>
+    <!-- JTV: TV remote support (self-guarding, no-op on desktop) -->
+    <script src="/static/internal/player_tv.js"></script>
   </body>
 </html>

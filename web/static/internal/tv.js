@@ -127,11 +127,11 @@
     for (var i = 0; i < allCards.length; i++) {
       if (!allCards[i].classList.contains("hidden")) {
         visibleIndices.push(i);
-        var numEl = allCards[i].querySelector(".tv-card-num");
-        if (numEl) numEl.textContent = String(visibleIndices.length);
+        var titleEl = allCards[i].querySelector(".tv-card-title");
+        if (titleEl) titleEl.textContent = String(visibleIndices.length);
       } else {
-        var numEl = allCards[i].querySelector(".tv-card-num");
-        if (numEl) numEl.textContent = "";
+        var titleEl = allCards[i].querySelector(".tv-card-title");
+        if (titleEl) titleEl.textContent = "";
       }
     }
     if (noResults) {
