@@ -283,6 +283,7 @@
     } else {
       for (var i = 0; i < allCards.length; i++) {
         allCards[i].classList.remove("hidden");
+        allCards[i].style.order = "";
       }
       rebuildVisible();
       currentIndex = -1;
@@ -299,17 +300,50 @@
 
   function applyFavFilter() {
     var favIds = getFavIds();
-    if (favIds.length === 0) return; // guard: no favorites configured
-    var favSet = Object.create(null);
+    if (favIds.length === 0) return;
+
+    // Build rank map: config order (fast lookup)
+    var favRank = Object.create(null);
     for (var i = 0; i < favIds.length; i++) {
-      favSet[favIds[i]] = true;
+      favRank[favIds[i]] = i;
     }
+
+    // Single pass: collect favs with their config rank, hide the rest
+    var favEntries = []; // [{index: allCards index, rank: config position}]
     for (var i = 0; i < allCards.length; i++) {
-      if (!favSet[allCards[i].getAttribute("data-channel-id")]) {
+      var cid = allCards[i].getAttribute("data-channel-id");
+      var rank = favRank[cid];
+      if (rank !== undefined) {
+        favEntries.push({ index: i, rank: rank });
+      } else {
         allCards[i].classList.add("hidden");
       }
     }
-    rebuildVisible();
+
+    // Sort by config rank — only favs (e.g. 60 items), not 900+
+    favEntries.sort(function (a, b) { return a.rank - b.rank; });
+
+    // Build visibleIndices, assign 1-indexed numbers, set CSS order
+    visibleIndices = [];
+    for (var i = 0; i < favEntries.length; i++) {
+      var realIdx = favEntries[i].index;
+      visibleIndices.push(realIdx);
+      allCards[realIdx].style.order = i;
+      var titleEl = allCards[realIdx].querySelector(".tv-card-title");
+      if (titleEl) titleEl.textContent = String(i + 1);
+    }
+    // Clear numbers + order on hidden cards
+    for (var i = 0; i < allCards.length; i++) {
+      if (allCards[i].classList.contains("hidden")) {
+        var titleEl = allCards[i].querySelector(".tv-card-title");
+        if (titleEl) titleEl.textContent = "";
+        allCards[i].style.order = "";
+      }
+    }
+
+    if (noResults) {
+      noResults.style.display = visibleIndices.length === 0 ? "" : "none";
+    }
     currentIndex = -1;
     if (visibleIndices.length > 0) {
       focusCardByIndex(visibleIndices[0]);
