@@ -514,6 +514,7 @@ func MpdHandler(c *fiber.Ctx) error {
 	}
 	parsedUrl, err := url.Parse(decryptedUrl)
 	if err != nil {
+		// JTV: don't crash on corrupt auth tokens, return 500 instead
 		utils.Log.Println("Failed to parse decrypted MPD URL:", err)
 		c.Status(fiber.StatusInternalServerError)
 		return fmt.Errorf("invalid auth token: %w", err)

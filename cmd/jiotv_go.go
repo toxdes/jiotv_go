@@ -105,8 +105,8 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	handlers.Init()
 
 	app.Get("/", handlers.IndexHandler)
-	app.Get("/tv", handlers.TVIndexHandler)
-	app.Get("/tv/play/:id", handlers.TVPlayHandler)
+	app.Get("/tv", handlers.TVIndexHandler)            // JTV: TV-optimized channel grid
+	app.Get("/tv/play/:id", handlers.TVPlayHandler)    // JTV: TV-optimized player page
 	app.Post("/login/sendOTP", handlers.LoginSendOTPHandler)
 	app.Post("/login/verifyOTP", handlers.LoginVerifyOTPHandler)
 	app.Get("/logout", handlers.LogoutHandler)
