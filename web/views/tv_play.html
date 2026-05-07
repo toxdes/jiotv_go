@@ -272,14 +272,6 @@
             return;
           }
 
-            // First press — show topbar
-            showTopbar();
-            backPressTimer = setTimeout(function () {
-              backPressTimer = null;
-            }, BACK_DOUBLE_WINDOW);
-            return;
-          }
-
           // Arrow keys / Enter — show topbar, ensure iframe has focus
           if (
             e.key === "ArrowUp" ||

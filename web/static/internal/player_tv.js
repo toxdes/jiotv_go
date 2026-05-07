@@ -13,9 +13,7 @@
 
   function findVideo() {
     if (video) return video;
-    // Shaka Player: <video> is in the HTML
     video = document.querySelector("video");
-    // Flowplayer: creates video inside #jiotv_go_player
     if (!video) {
       var container = document.getElementById("jiotv_go_player");
       if (container) video = container.querySelector("video");
@@ -30,23 +28,23 @@
   }
 
   function togglePlay() {
-    var v = findVideo();
-    if (!v) return;
-    if (v.paused) {
-      v.play().catch(function () {});
+    if (!video) findVideo();
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(function () {});
     } else {
-      v.pause();
+      video.pause();
     }
   }
 
   function doPlay() {
-    var v = findVideo();
-    if (v && v.paused) v.play().catch(function () {});
+    if (!video) findVideo();
+    if (video && video.paused) video.play().catch(function () {});
   }
 
   function doPause() {
-    var v = findVideo();
-    if (v && !v.paused) v.pause();
+    if (!video) findVideo();
+    if (video && !video.paused) video.pause();
   }
 
   // ── Parent commands ────────────────────────────────────────────────
@@ -84,18 +82,17 @@
   function onVideoReady() {
     if (active) return;
     active = true;
-    var v = findVideo();
-    if (v) {
-      v.volume = 1.0;
-      v.addEventListener("play", function () {
+    findVideo();
+    if (video) {
+      video.volume = 1.0;
+      video.addEventListener("play", function () {
         postToParent({ type: "playing" });
       });
-      v.addEventListener("pause", function () {
+      video.addEventListener("pause", function () {
         postToParent({ type: "paused" });
       });
-      // Handle autoplay failures — if video stays paused after load
       setTimeout(function () {
-        if (v.paused) {
+        if (video.paused) {
           postToParent({ type: "autoplayFailed" });
         }
       }, 3000);
@@ -103,10 +100,9 @@
     postToParent({ type: "ready" });
   }
 
-  // Signal ready after Shaka/Flowplayer has had time to initialize
   setTimeout(onVideoReady, 500);
 
-  // ── Disarm player UI controls (prevent focus stealing) ─────────────
+  // ── Disarm player UI controls (MutationObserver, not setInterval) ──
 
   function disarmControls() {
     var btns = document.querySelectorAll(
@@ -120,8 +116,18 @@
     }
   }
 
-  // Run repeatedly — Shaka/Flowplayer create controls asynchronously
-  setInterval(disarmControls, 2000);
+  var disarmTimer = null;
+  function scheduleDisarm() {
+    clearTimeout(disarmTimer);
+    disarmTimer = setTimeout(disarmControls, 300);
+  }
+
+  if (window.MutationObserver) {
+    var observer = new MutationObserver(scheduleDisarm);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+  // Initial run
   setTimeout(disarmControls, 1000);
+  setTimeout(disarmControls, 3000);
 
 })();

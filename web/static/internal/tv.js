@@ -19,8 +19,11 @@
   // ── Cached state ──────────────────────────────────────────────────────
 
   var allCards = [];
+  var cardTitles = [];      // pre-cached .tv-card-title elements
+  var cardIds = [];         // pre-cached data-channel-id strings
   var channelIdMap = Object.create(null);
   var visibleIndices = [];
+  var visibleRank = [];     // visibleRank[realIndex] = position in visibleIndices, or -1
   var cols = 5;
   var currentIndex = -1;
   var resizeTimer = null;
@@ -102,10 +105,14 @@
   function initCache() {
     var cards = grid.querySelectorAll(".tv-card");
     allCards = [];
+    cardTitles = [];
+    cardIds = [];
     channelIdMap = Object.create(null);
     for (var i = 0; i < cards.length; i++) {
       allCards.push(cards[i]);
       channelIdMap[cards[i].getAttribute("data-channel-id")] = cards[i];
+      cardTitles.push(cards[i].querySelector(".tv-card-title"));
+      cardIds.push(cards[i].getAttribute("data-channel-id"));
     }
     updateColumnCount();
     rebuildVisible();
@@ -124,14 +131,15 @@
 
   function rebuildVisible() {
     visibleIndices = [];
+    visibleRank = [];
     for (var i = 0; i < allCards.length; i++) {
       if (!allCards[i].classList.contains("hidden")) {
+        visibleRank[i] = visibleIndices.length;
         visibleIndices.push(i);
-        var titleEl = allCards[i].querySelector(".tv-card-title");
-        if (titleEl) titleEl.textContent = String(visibleIndices.length);
+        if (cardTitles[i]) cardTitles[i].textContent = String(visibleIndices.length);
       } else {
-        var titleEl = allCards[i].querySelector(".tv-card-title");
-        if (titleEl) titleEl.textContent = "";
+        visibleRank[i] = -1;
+        if (cardTitles[i]) cardTitles[i].textContent = "";
       }
     }
     if (noResults) {
@@ -140,7 +148,7 @@
   }
 
   function indexInVisible(realIndex) {
-    return visibleIndices.indexOf(realIndex);
+    return (realIndex >= 0 && realIndex < visibleRank.length) ? visibleRank[realIndex] : -1;
   }
 
   // ── Click delegation (SPA: open overlay instead of navigate) ───────────
@@ -192,7 +200,7 @@
     if (!card) return;
     currentIndex = realIndex;
     card.focus({ preventScroll: true });
-    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    card.scrollIntoView({ block: "center", behavior: "instant" });
   }
 
   function focusFirstVisible() {
@@ -309,10 +317,9 @@
     }
 
     // Single pass: collect favs with their config rank, hide the rest
-    var favEntries = []; // [{index: allCards index, rank: config position}]
+    var favEntries = [];
     for (var i = 0; i < allCards.length; i++) {
-      var cid = allCards[i].getAttribute("data-channel-id");
-      var rank = favRank[cid];
+      var rank = favRank[cardIds[i]];
       if (rank !== undefined) {
         favEntries.push({ index: i, rank: rank });
       } else {
@@ -325,18 +332,21 @@
 
     // Build visibleIndices, assign 1-indexed numbers, set CSS order
     visibleIndices = [];
+    visibleRank = [];
+    for (var i = 0; i < allCards.length; i++) {
+      visibleRank[i] = -1;
+    }
     for (var i = 0; i < favEntries.length; i++) {
       var realIdx = favEntries[i].index;
+      visibleRank[realIdx] = i;
       visibleIndices.push(realIdx);
       allCards[realIdx].style.order = i;
-      var titleEl = allCards[realIdx].querySelector(".tv-card-title");
-      if (titleEl) titleEl.textContent = String(i + 1);
+      if (cardTitles[realIdx]) cardTitles[realIdx].textContent = String(i + 1);
     }
     // Clear numbers + order on hidden cards
     for (var i = 0; i < allCards.length; i++) {
       if (allCards[i].classList.contains("hidden")) {
-        var titleEl = allCards[i].querySelector(".tv-card-title");
-        if (titleEl) titleEl.textContent = "";
+        if (cardTitles[i]) cardTitles[i].textContent = "";
         allCards[i].style.order = "";
       }
     }
