@@ -10,44 +10,36 @@ We have video tutorials for [Windows](https://youtu.be/BnNTYTSvVBc), and [Androi
 
 ## Fork Updates
 
-This fork maintains the upstream codebase with the following additions:
+### Config-Based Favourites
 
-### Channel Favourites (Config-based)
-
-Configure a list of favourite channels in your config file using the `favorite_channel_ids` field (or the `JIOTV_FAVORITE_CHANNEL_IDS` environment variable):
+Configure a list of favourite channel IDs in `config.toml` using `favorite_channel_ids`. The order is preserved — channels appear in the exact sequence you specify. Used by the M3U endpoint, the `/fav` alias, and the TV UI.
 
 ```yaml
 favorite_channel_ids:
-  - "ChannelID1"
-  - "ChannelID2"
+  - "144"
+  - "279"
+  - "755"
 ```
 
-These are used server-side to generate filtered M3U playlists (see `fav=true` parameter below).
+### `/fav` and `fav=true`
 
-### Client-side Favourites in Web UI
+- `/fav` — shorthand for `/channels?type=m3u&fav=true`, returns an M3U playlist containing only your config-based favourites in order. Accepts additional query params like `?language=hindi`.
+- `/channels?type=m3u&fav=true` — same, via the channels endpoint.
 
-The web interface includes a per-channel star button that marks channels as favourites. Favourites are stored in your browser's `localStorage` and are preserved across sessions. The order in which you add favourites is preserved (newest last). **Note:** This client-side feature is independent of the config-based favourites above and does not sync with the server.
+### Client-Side Favourites (Web UI)
 
-### Channel ID Display in Web UI
+The web interface includes per-channel star buttons. These favourites are stored in your browser's `localStorage` and are independent of the config-based favourites.
 
-Each channel card in the web interface now shows its channel ID (`ID:...`) for easy reference — useful for configuring favourites or debugging.
+### WebOS / Smart TV App (`/tv`)
 
-### `fav=true` Query Parameter
+A TV-optimized channel grid at `/tv` (and player at `/tv/play/:id`) with:
+- Spatial navigation via remote arrow keys
+- Channel number typing (press digits on remote to jump to a channel)
+- Channel Up/Down remote buttons for surfing
+- Favourites toggle (star button or Yellow remote key) using the same `favorite_channel_ids` from config
+- SPA player overlay — launching and closing channels is instant, no page reloads
 
-The `/channels` endpoint accepts a `fav=true` query parameter. When combined with `type=m3u`, it returns an M3U playlist containing only the channels listed in `favorite_channel_ids` (config-based), preserving the configured order:
-
-```
-/channels?type=m3u&fav=true
-```
-
-### `/fav` Alias
-
-A dedicated `/fav` endpoint is available as a shorthand for `/channels?type=m3u&fav=true`. You can also pass additional query parameters (e.g. language filters) which are forwarded:
-
-```
-/fav
-/fav?language=english
-```
+A WebOS `.ipk` package is included in the `webos/` directory. See `webos/Makefile` for build and install instructions.
 
 ---
 
@@ -74,11 +66,10 @@ Get Started with JioTV Go by following the [Get Started](https://jiotv_go.rabil.
   
 - [JioTV Go 📺](#jiotv-go-)
   - [Fork Updates](#fork-updates)
-    - [Channel Favourites (Config-based)](#channel-favourites-config-based)
-    - [Client-side Favourites in Web UI](#client-side-favourites-in-web-ui)
-    - [Channel ID Display in Web UI](#channel-id-display-in-web-ui)
-    - [`fav=true` Query Parameter](#favtrue-query-parameter)
-    - [`/fav` Alias](#fav-alias)
+    - [Config-Based Favourites](#config-based-favourites)
+    - [`/fav` and `fav=true`](#fav-and-favtrue)
+    - [Client-Side Favourites (Web UI)](#client-side-favourites-web-ui)
+    - [WebOS / Smart TV App (`/tv`)](#webos--smart-tv-app-tv)
   - [Features 🌟](#features-)
   - [Table of Contents](#table-of-contents)
   - [Documentation](#documentation)

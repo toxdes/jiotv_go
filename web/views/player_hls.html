@@ -49,11 +49,17 @@
         ui: flowplayer.ui.USE_THIN_CONTROLBAR,
       });
 
+      // JTV: max volume for TV remote usage
+      player.volumeLevel = 1;
+
       function initDpadRemoteSupport() {
         const playerRoot = document.querySelector(".flowplayer");
         if (!playerRoot) {
           return false;
         }
+
+        // JTV: skip control focus in TV iframe mode
+        const tvMode = window.parent !== window;
 
         const isArrowKey = (event) => {
           return (
@@ -76,11 +82,14 @@
               '.fp-ui [role="button"], .fp-ui .fp-play, .fp-ui .fp-pause'
             )
           );
-          controls.forEach((control) => {
-            if (!control.hasAttribute("tabindex") || control.getAttribute("tabindex") === "-1") {
-              control.setAttribute("tabindex", "0");
-            }
-          });
+          // JTV: don't make controls focusable in TV iframe mode
+          if (!tvMode) {
+            controls.forEach((control) => {
+              if (!control.hasAttribute("tabindex") || control.getAttribute("tabindex") === "-1") {
+                control.setAttribute("tabindex", "0");
+              }
+            });
+          }
           return controls;
         };
 
@@ -91,7 +100,9 @@
           );
         };
 
+        // JTV: skip control focus in TV iframe mode
         const focusPlayPauseControl = () => {
+          if (tvMode) return false;
           const controls = getFocusableControls();
           const target = getPlayPauseControl() || controls[0];
           if (!target) {
@@ -111,9 +122,13 @@
           if (isMediaToggleKey(event)) {
             event.preventDefault();
             player.togglePlay();
-            focusPlayPauseControl();
+            // JTV: skip control focus in TV iframe mode
+            if (!tvMode) focusPlayPauseControl();
             return;
           }
+
+          // JTV: skip arrow key control navigation in TV iframe mode
+          if (tvMode) return;
 
           if (isArrowKey(event) && !isInsidePlayer(document.activeElement)) {
             if (focusPlayPauseControl()) {
@@ -174,5 +189,7 @@
         }
       });
     </script>
+    <!-- JTV: TV remote support (self-guarding, no-op on desktop) -->
+    <script src="/static/internal/player_tv.js"></script>
   </body>
 </html>
