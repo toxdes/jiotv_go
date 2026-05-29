@@ -13,6 +13,7 @@ bin/
 
 # Main binary
 jiotv_go
+jiotv_go-arm64
 
 # Test binary, built with `go test -c`
 *.test
