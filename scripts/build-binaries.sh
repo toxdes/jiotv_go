@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 
+arm64_only=false
+for arg in "$@"; do
+    case "$arg" in
+        --arm64-only|--arm-only) arm64_only=true ;;
+    esac
+done
+
+if $arm64_only; then
+    echo "Building arm64 binary only..."
+    mkdir -p bin
+    fork_suffix=$(cat "$(dirname "$0")/fork-suffix" 2>/dev/null || echo "")
+    ldflags="-s -w"
+    [[ -n "$fork_suffix" ]] && ldflags+=" -X main.versionSuffix=$fork_suffix"
+    CGO_ENABLED=0 GOEXPERIMENT=jsonv2,greenteagc GOOS=linux GOARCH=arm64 go build -o "bin/jiotv_go-linux-arm64" -trimpath -ldflags="$ldflags" .
+    echo "Done: bin/jiotv_go-linux-arm64"
+    exit 0
+fi
+
 mkdir -p bin
 allowed_archs="amd64 arm arm64 386 riscv64"
 echo "Building binaries for allowed architectures: $allowed_archs"
