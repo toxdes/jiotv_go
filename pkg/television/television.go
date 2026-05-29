@@ -194,7 +194,7 @@ func (tv *Television) Live(channelID string) (*LiveURLOutput, error) {
 			utils.Log.Println("Retrying the request...")
 			return tv.Live(channelID)
 		}
-		utils.Log.Panic(err)
+		utils.Log.Println(err)
 		return nil, err
 	}
 	if resp.StatusCode() != fasthttp.StatusOK {
@@ -204,14 +204,14 @@ func (tv *Television) Live(channelID string) (*LiveURLOutput, error) {
 		// Log headers and request data
 		utils.Log.Println("Request headers:", req.Header.String())
 		utils.Log.Println("Request data:", formData.String())
-		utils.Log.Panicln("Response: ", response)
+		utils.Log.Println("Response: ", response)
 
 		return nil, fmt.Errorf("Request failed with status code: %d\nresponse: %s", resp.StatusCode(), response)
 	}
 
 	var result LiveURLOutput
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		utils.Log.Panic(err)
+		utils.Log.Println(err)
 		return nil, err
 	}
 
@@ -718,7 +718,7 @@ func getSLChannel(channelID string) (*LiveURLOutput, error) {
 
 		chu, err := base64.StdEncoding.DecodeString(SONY_CHANNELS[val])
 		if err != nil {
-			utils.Log.Panic(err)
+			utils.Log.Println(err)
 			return nil, err
 		}
 
@@ -736,12 +736,14 @@ func getSLChannel(channelID string) (*LiveURLOutput, error) {
 
 		// Perform the HTTP GET request
 		if err := utils.GetRequestClient().Do(req, resp); err != nil {
-			utils.Log.Panic(err)
+			utils.Log.Println(err)
+			return nil, err
 		}
 
 		if resp.StatusCode() != fasthttp.StatusFound {
-			utils.Log.Panicf("Request failed with status code: %d", resp.StatusCode())
-			utils.Log.Panicln("Response: ", string(resp.Body()))
+			utils.Log.Printf("Request failed with status code: %d", resp.StatusCode())
+			utils.Log.Println("Response: ", string(resp.Body()))
+			return nil, fmt.Errorf("Sony channel request failed with status code: %d", resp.StatusCode())
 		}
 
 		// Store the location header in actual_url
@@ -793,7 +795,7 @@ func (tv *Television) GetCatchupURL(channelID, srno, start, end string) (*LiveUR
 				utils.Log.Printf("Retrying the catchup request (attempt %d/%d)...", i+1, maxRetries)
 				continue
 			}
-			utils.Log.Panicln(err)
+			utils.Log.Println(err)
 			return nil, err
 		}
 		break
@@ -818,7 +820,7 @@ func (tv *Television) GetCatchupURL(channelID, srno, start, end string) (*LiveUR
 
 	var result LiveURLOutput
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		utils.Log.Panicln(err)
+		utils.Log.Println(err)
 		return nil, err
 	}
 
