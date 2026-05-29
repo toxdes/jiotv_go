@@ -41,6 +41,25 @@ A TV-optimized channel grid at `/tv` (and player at `/tv/play/:id`) with:
 
 A WebOS `.ipk` package is included in the `webos/` directory. See `webos/Makefile` for build and install instructions.
 
+### External Plugins (`plugins`)
+
+Add channels from any IPTV provider via a generic plugin system. Plugins are configured in
+`config.toml` as a `name → config URL` map:
+
+```toml
+plugins = { myprovider = "https://example.com/myprovider-config.json" }
+```
+
+Each plugin fetches a runtime JSON config at startup containing:
+- `name` — route prefix (e.g. `myprovider` → `/myprovider/:id`)
+- `category` — numeric category ID
+- `channels[]` — channel list with `id`, `name`, `logo`, `language`, `genre`
+- `api` — `playback_url`, `auth_url`, `platform_token_regex`
+- `headers` — custom HTTP headers (e.g. `Origin`, `Referer`)
+
+The plugin handles auth token extraction, playback API calls, HLS playlist rewriting,
+segment proxying, and logo caching — no provider-specific strings in source.
+
 ---
 
 ## Features 🌟

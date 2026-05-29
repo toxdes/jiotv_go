@@ -46,3 +46,8 @@ default_languages = []
 # Favorite Channel IDs to display in the M3U playlist when fav=true is used. Array of channel IDs. Default: []
 # Example: favorite_channel_ids = ["101", "102", "105"]
 favorite_channel_ids = []
+
+# External plugins. Maps plugin name to runtime config JSON URL.
+# The config JSON must contain: name, category, channels[], api.playback_url, api.auth_url, api.platform_token_regex
+# Example: plugins = { myprovider = "https://example.com/myprovider-config.json" }
+plugins = {}

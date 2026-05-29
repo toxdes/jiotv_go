@@ -36,7 +36,9 @@
   function openChannel(card) {
     var id = card.getAttribute("data-channel-id");
     var name = card.getAttribute("data-channel-name") || id;
-    var url = "/mpd/" + id + "?q=auto";
+    // Use the server-rendered player URL (from data-player-url attribute)
+    // Falls back to /mpd/:id if the attribute is missing
+    var url = card.getAttribute("data-player-url") || "/mpd/" + id + "?q=auto";
 
     for (var i = 0; i < allCards.length; i++) {
       if (allCards[i] === card) {
