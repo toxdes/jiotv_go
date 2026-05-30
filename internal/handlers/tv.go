@@ -56,6 +56,7 @@ func TVIndexHandler(c *fiber.Ctx) error {
 	type tvChannel struct {
 		television.Channel
 		PlayerURL string `json:"player_url"`
+		StreamURL string `json:"stream_url"`
 	}
 	tvChannels := make([]tvChannel, len(displayChannels))
 	for i, ch := range displayChannels {
@@ -66,14 +67,18 @@ func TVIndexHandler(c *fiber.Ctx) error {
 			logoURL = hostURL + "/jtvimage/" + ch.LogoURL
 		}
 		var playURL string
+		var streamURL string
 		if ch.IsCustom && ch.PluginID != "" {
 			playURL = "/" + ch.PluginID + "/player/" + ch.ID + "?q=auto"
+			streamURL = "/" + ch.PluginID + "/" + ch.ID
 		} else {
 			playURL = "/player/" + ch.ID + "?q=auto"
+			streamURL = utils.BuildHLSPlayURL("auto", ch.ID)
 		}
 		tvChannels[i] = tvChannel{
 			Channel:   ch,
 			PlayerURL: playURL,
+			StreamURL: streamURL,
 		}
 		tvChannels[i].LogoURL = logoURL
 	}
