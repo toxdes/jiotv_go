@@ -108,6 +108,7 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	app.Get("/", handlers.IndexHandler)
 	app.Get("/tv", handlers.TVIndexHandler)            // JTV: TV-optimized channel grid
 	app.Get("/tv/play/:id", handlers.TVPlayHandler)    // JTV: TV-optimized player page
+	app.Get("/tv2", handlers.TV2Handler)               // TV2: Tata Sky-style fullscreen player
 	app.Post("/login/sendOTP", handlers.LoginSendOTPHandler)
 	app.Post("/login/verifyOTP", handlers.LoginVerifyOTPHandler)
 	app.Get("/logout", handlers.LogoutHandler)
