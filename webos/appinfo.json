@@ -1,18 +1,20 @@
 {
-  "id": "com.jiotv.go.tv",
-  "version": "1.0.0",
+  "id": "com.toxdes.jiotvgo",
+  "version": "1.0.1",
   "vendor": "JioTV Go",
   "type": "web",
   "main": "index.html",
   "title": "JioTV Go",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
+  "iconColor": "#ea4335",
   "resolution": "1920x1080",
   "bgColor": "#0d1117",
   "support360": false,
   "appDescription": "JioTV Go - TV app for WebOS. Requires a running JioTV Go server on the local network.",
   "enablePigScreenSaver": false,
   "trustLevel": "default",
+  "disableBackHistoryAPI": true,
   "vendorExtension": {
     "allowCrossDomain": true
   }
