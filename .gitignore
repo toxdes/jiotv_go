@@ -39,6 +39,9 @@ jiotv_credentials_v2.json
 # Playlist .m3u file
 *.m3u
 
+# WebOS IPK build artifacts
+*.ipk
+
 # Node
 node_modules/
 web/node_modules/
@@ -50,6 +53,9 @@ jiotv_go*.log
 
 # EPG
 epg.xml.gz
+
+# Personal deploy scripts
+scripts/
 
 # config
 config.json
