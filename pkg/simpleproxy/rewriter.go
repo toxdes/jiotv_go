@@ -10,7 +10,7 @@ import (
 type RewriteConfig struct {
 	ChannelID string
 	// CookieHex is the hex-encoded cookie string from the CDN response.
-	// Maps to PHP's "thor" param.
+	// Maps to the "thor" param.
 	CookieHex string
 	// ServerHost is our own server's host (e.g. "http://192.168.1.5:5001").
 	ServerHost string
@@ -44,8 +44,7 @@ func rewriteURILine(line, serverHost, cookieHex, channelID string) string {
 }
 
 // RewritePlaylist rewrites a top-level M3U8 playlist so that all sub-resource
-// URLs point back to our simple proxy endpoint.  This matches the logic in
-// PHP's live.php.
+// URLs point back to our simple proxy endpoint.
 //
 // Rewrites:
 //   - URI="<url>"  →  URI="/simple/proxy?pkey=<url>&c=<cookie>&id=<ch>"
@@ -73,7 +72,7 @@ func RewritePlaylist(content string, baseURL string, cfg RewriteConfig) (string,
 
 		case !strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, ".m3u8"):
 			// Replace sub-playlist URLs with encrypted proxy URL.
-			// PHP: wanda.php?token=...&thor=...&id=...&jane_foster=...&hls=<encrypted>
+			// wanda URL: token=...&thor=...&id=...&jane_foster=...&hls=<encrypted>
 			fullURL := baseURL + trimmed
 			encrypted, err := Encrypt(fullURL)
 			if err != nil {
@@ -102,8 +101,7 @@ func RewritePlaylist(content string, baseURL string, cfg RewriteConfig) (string,
 }
 
 // RewriteSubPlaylist rewrites a sub-M3U8 playlist (from the hls proxy handler)
-// so that TS segments and key URIs point back to our proxy.  This matches the
-// logic in PHP's wanda.php (hls branch).
+// so that TS segments and key URIs point back to our proxy.
 //
 // Rewrites:
 //   - URI="<url>" → URI="/simple/proxy?pkey=<url>&c=<cookie>&id=<ch>"

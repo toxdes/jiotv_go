@@ -15,12 +15,12 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// defaultFallbackURL matches the PHP project's hardcoded Twitter fallback stream.
+// defaultFallbackURL is the fallback stream URL.
 const defaultFallbackURL = "https://video.twimg.com/amplify_video/1797150287292981248/pl/-GLBpWJuiNKBrdvp.m3u8"
 
-// SimpleLiveHandler serves a PHP-style rewritten M3U8 playlist.
+// SimpleLiveHandler serves a rewritten M3U8 playlist.
 //
-// Flow (mirrors PHP's live.php):
+// Flow:
 //  1. Calls JioTV API to get the HLS URL for the channel
 //  2. Fetches the M3U8 playlist from the CDN (captures Set-Cookie)
 //  3. Rewrites all URIs to point back to /simple/proxy
@@ -70,7 +70,7 @@ func SimpleLiveHandler(c *fiber.Ctx) error {
 		return serveFallbackStream(c, id)
 	}
 
-	// Hex-encode the cookie for the URL param (matches PHP's bin2hex(base64_encode(...)) behavior)
+	// Hex-encode the cookie for the URL param
 	var cookieHex string
 	if cookieValue != "" {
 		cookieHex = hex.EncodeToString([]byte(cookieValue))
@@ -95,7 +95,6 @@ func SimpleLiveHandler(c *fiber.Ctx) error {
 
 // SimpleProxyHandler handles all sub-resource proxying for the simple playback mode.
 // It dispatches on the query parameter present: hls, ts, or pkey.
-// Mirrors PHP's wanda.php.
 //
 // GET /simple/proxy?hls=<encrypted>&c=<cookie>&id=<ch>
 // GET /simple/proxy?ts=<encrypted>&c=<cookie>&id=<ch>
@@ -130,7 +129,6 @@ func SimpleProxyHandler(c *fiber.Ctx) error {
 }
 
 // handleSimpleHLS handles sub-M3U8 playlist requests.
-// Matches PHP's wanda.php hls branch.
 func handleSimpleHLS(c *fiber.Ctx, encryptedURL, cookieValue, channelID, serverHost string) error {
 	decryptedURL, err := simpleproxy.Decrypt(encryptedURL)
 	if err != nil {
@@ -182,7 +180,6 @@ func setHdneaCookie(c *fiber.Ctx, cookieValue string) {
 }
 
 // handleSimpleTS proxies a TS segment request.
-// Matches PHP's wanda.php marvel branch.
 func handleSimpleTS(c *fiber.Ctx, encryptedURL, cookieValue, channelID string) error {
 	decryptedURL, err := simpleproxy.Decrypt(encryptedURL)
 	if err != nil {
@@ -204,7 +201,6 @@ func handleSimpleTS(c *fiber.Ctx, encryptedURL, cookieValue, channelID string) e
 }
 
 // handleSimplePKey proxies a key/license URL request.
-// Matches PHP's wanda.php pkey branch.
 func handleSimplePKey(c *fiber.Ctx, keyURL, cookieValue, channelID string) error {
 	setHdneaCookie(c, cookieValue)
 	setSimpleUpstreamHeaders(c, channelID)
@@ -305,8 +301,7 @@ func setSimpleUpstreamHeaders(c *fiber.Ctx, channelID string) {
 	}
 }
 
-// setSimpleM3U8Headers sets the response headers for HLS playlist responses,
-// matching PHP's sendM3U8HeadersAdvanced().
+// setSimpleM3U8Headers sets the response headers for HLS playlist responses.
 func setSimpleM3U8Headers(c *fiber.Ctx) {
 	c.Set("Content-Type", "application/vnd.apple.mpegurl")
 	c.Set("Access-Control-Allow-Origin", "*")
@@ -318,7 +313,7 @@ func setSimpleM3U8Headers(c *fiber.Ctx) {
 }
 
 // serveFallbackStream returns the hardcoded fallback M3U8 stream when a channel
-// cannot be fetched, matching PHP's video() function behavior.
+// cannot be fetched.
 func serveFallbackStream(c *fiber.Ctx, channelID string) error {
 	fallbackURL := defaultFallbackURL
 	if config.Cfg.SimplePlayback.FallbackURL != "" {

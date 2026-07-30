@@ -87,7 +87,7 @@ func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
 }
 
 // Encrypt encrypts plaintext using AES-128-CBC with PKCS7 padding.
-// Returns hex-encoded ciphertext, matching PHP's bin2hex(openssl_encrypt(...)).
+// Returns hex-encoded ciphertext.
 // The IV is prepended to the ciphertext (first 16 bytes of the hex output).
 func Encrypt(plaintext string) (string, error) {
 	key := getKey()
@@ -111,7 +111,7 @@ func Encrypt(plaintext string) (string, error) {
 	mode := cipher.NewCBCEncrypter(block, iv)
 	mode.CryptBlocks(ciphertext, padded)
 
-	// Prepend IV to ciphertext (matches PHP's openssl_encrypt behavior when IV is random)
+	// Prepend IV to ciphertext
 	result := make([]byte, len(iv)+len(ciphertext))
 	copy(result, iv)
 	copy(result[len(iv):], ciphertext)
