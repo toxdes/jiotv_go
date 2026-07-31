@@ -7,7 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;-webkit-user-select:none;user-select:none}
-#tv2-video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;outline:none}
+#tv2-player{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000;outline:none;pointer-events:none}
 #tv2-overlay{position:fixed;bottom:7.5rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:3.75rem;padding:2.4rem 4.5rem;background:rgba(0,0,0,.88);border-radius:2.25rem;color:#fff;opacity:0;transition:opacity .1s;will-change:opacity;pointer-events:none;z-index:100;white-space:nowrap;contain:layout style}
 #tv2-overlay.active{opacity:1}
 #tv2-ch-number{font-size:6.6rem;font-weight:800;min-width:7.5rem;text-align:center;letter-spacing:.05em}
@@ -31,10 +31,12 @@ body{background:#000;overflow:hidden;-webkit-user-select:none;user-select:none}
 #tv2-guide{position:fixed;top:0;left:0;bottom:0;width:63rem;max-width:85vw;background:rgba(16,16,16,.95);z-index:150;overflow:hidden;display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .18s ease;will-change:transform;border-right:1px solid rgba(255,255,255,.08)}
 #tv2-guide.open{transform:translateX(0)}
 #tv2-guide-header{padding:2.1rem 2.6rem;font-size:2.8rem;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;letter-spacing:.03em}
-#tv2-guide-list{flex:1;overflow-y:auto;overflow-x:hidden;padding:.7rem 0;contain:strict}
+#tv2-guide-list{flex:1;position:relative;overflow-y:auto;overflow-x:hidden;padding:.7rem 0;contain:strict}
 #tv2-guide-list::-webkit-scrollbar{width:7px}
 #tv2-guide-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
-.tv2-guide-row{display:flex;align-items:center;gap:1.8rem;padding:1.2rem 2.6rem;cursor:pointer;border-left:5px solid transparent;transition:background .04s,border-color .04s;min-height:9.1rem}
+#tv2-guide-spacer{width:1px;pointer-events:none}
+#tv2-guide-rows{position:absolute;top:.7rem;left:0;right:0}
+.tv2-guide-row{display:flex;align-items:center;gap:1.8rem;padding:1.2rem 2.6rem;cursor:pointer;border-left:5px solid transparent;transition:background .04s,border-color .04s;height:9.1rem}
 .tv2-guide-row.highlight{background:rgba(234,67,53,.25);border-left-color:#ea4335}
 .tv2-guide-row.active{background:rgba(255,255,255,.07);border-left-color:rgba(255,255,255,.2)}
 #tv2-guide-footer{padding:1.4rem 2.6rem;font-size:1.9rem;color:rgba(255,255,255,.35);border-top:1px solid rgba(255,255,255,.08);flex-shrink:0;text-align:center;letter-spacing:.05em}
@@ -60,17 +62,16 @@ body{background:#000;overflow:hidden;-webkit-user-select:none;user-select:none}
 #tv2-setup-overlay .actions .cancel{background:#30363d;color:#e6edf3}
 #tv2-setup-overlay .error{font-size:1.2rem;color:#ea4335;display:none}
 </style>
-<script src="/static/external/hls.latest.min.js"></script>
 </head>
 <body>
 
-<video id="tv2-video" playsinline webkit-playsinline></video>
+<iframe id="tv2-player" tabindex="-1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
 
 <div id="tv2-info-bar">
 <span><span class="ch-name" id="tv2-info-ch-name"></span><span class="ch-mode" id="tv2-info-mode"></span></span>
 <span class="hints">
 <span class="key"><span class="sq green"></span> Guide</span>
-<span class="key"><span class="sq yellow"></span> Favourites</span>
+<span class="key"><span class="sq yellow"></span> F / Favourites</span>
 <span class="key"><span class="sq red"></span> Config</span>
 <span class="key">◄► Browse</span>
 </span>
@@ -122,7 +123,7 @@ document.getElementById('tv2-splash').innerHTML='<span>No channels available</sp
 return;
 }
 
-var video=document.getElementById('tv2-video');
+var playerFrame=document.getElementById('tv2-player');
 var overlay=document.getElementById('tv2-overlay');
 var chNum=document.getElementById('tv2-ch-number');
 var chName=document.getElementById('tv2-ch-name');
@@ -131,6 +132,7 @@ var numOverlay=document.getElementById('tv2-num-overlay');
 var splash=document.getElementById('tv2-splash');
 var guide=document.getElementById('tv2-guide');
 var guideList=document.getElementById('tv2-guide-list');
+var guideHeader=document.getElementById('tv2-guide-header');
 var loadingOverlay=document.getElementById('tv2-loading');
 var splashText=document.getElementById('tv2-splash-text');
 
@@ -159,25 +161,25 @@ var hasStarted=typeof window.webOSSystem!=='undefined';
 var numBuffer='';
 var numTimer=null;
 var overlayTimer=null;
-var hls=null;
+var loadingTimer=null;
+var loadSequence=0;
 var guideOpen=false;
 var guideIndex=0;
+var guideRenderSignature='';
+var GUIDE_BUFFER_ROWS=8;
 var favMode=localStorage.getItem('tv2_fav_mode')==='true'&&hasFavorites;
 var NUM_TIMEOUT=1500;
-var hlsRecoveryAttempts=0;
-var MAX_HLS_RECOVERY=3;
 var errorEl=document.getElementById('tv2-error');
 var _redTimer=null;
 
-// Persistent buffering detection across channel switches
-video.addEventListener('waiting',function(){loadingOverlay.classList.add('active');});
-video.addEventListener('playing',function(){loadingOverlay.classList.remove('active');});
+playerFrame.addEventListener('load',function(){
+loadingOverlay.classList.remove('active');
+});
 
 // On WebOS IPK (native HLS), autoplay works without gesture — start immediately with loading splash
 if(hasStarted){
 splashText.textContent='Loading…';
 loadChannel(0);
-renderGuide();
 if(favMode)setFavMode(true);
 setTimeout(function(){splash.classList.add('hidden');},600);
 }else{
@@ -192,16 +194,16 @@ function setFavMode(active){
 favMode=active;
 localStorage.setItem('tv2_fav_mode',favMode?'true':'');
 document.getElementById('tv2-info-mode').textContent=favMode?'Channels: Favourites':'Channels: All';
+guideHeader.textContent=favMode?'FAVOURITES':'CHANNEL GUIDE';
 if(favMode){
 if(!isFavChannel(currentIndex)&&favIndices.length){
 loadChannel(favIndices[0]);
-renderGuide();
 return;
 }
 }
 updateFavStar();
 showOverlay();
-renderGuide();
+if(guideOpen)renderGuide(guideIndex);
 }
 
 function toggleFav(){
@@ -254,37 +256,66 @@ document.getElementById('tv2-info-ch-name').textContent=ch.channel_name||'';
 updateFavStar();
 }
 
-function renderGuide(){
+function guideRowHeight(){
+return parseFloat(getComputedStyle(document.documentElement).fontSize)*9.1;
+}
+
+function guidePosition(index,list){
+return list?favIndexMap[index]:index;
+}
+
+function renderGuide(centerIndex){
 var list=getNavIndices();
 var count=list?list.length:channels.length;
+if(!count)return;
+var rowHeight=guideRowHeight();
+var visibleRows=Math.max(1,Math.ceil(guideList.clientHeight/rowHeight));
+var center=centerIndex===undefined?Math.floor(guideList.scrollTop/rowHeight)+(visibleRows>>1):guidePosition(centerIndex,list);
+if(center===undefined)center=0;
+var start=Math.max(0,Math.min(count-visibleRows-GUIDE_BUFFER_ROWS*2,center-visibleRows-GUIDE_BUFFER_ROWS));
+var end=Math.min(count,start+visibleRows+GUIDE_BUFFER_ROWS*2);
+var signature=[favMode,count,start,currentIndex,guideIndex,rowHeight].join(':');
+if(signature===guideRenderSignature)return;
+guideRenderSignature=signature;
 var html='';
-for(var j=0;j<count;j++){
+for(var j=start;j<end;j++){
 var i=list?list[j]:j;
 var ch=channels[i];
 var cls='tv2-guide-row';
 if(i===currentIndex)cls+=' active';
 if(i===guideIndex)cls+=' highlight';
-html+='<div id="gr-'+i+'" class="'+cls+'">';
+html+='<div data-channel-index="'+i+'" class="'+cls+'">';
 html+='<span style="font-size:2.3rem;font-weight:700;min-width:5.3rem;text-align:right;color:rgba(255,255,255,.5);flex-shrink:0">'+(list?j+1:i+1)+'</span>';
 html+='<span style="font-size:2.3rem;font-weight:500;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+(ch.channel_name||'')+'</span>';
 html+='<span style="font-size:2.5rem;color:#ffd700;min-width:3.2rem;text-align:center;flex-shrink:0;opacity:'+(isFavChannel(i)?'1':'.3')+'">★</span>';
 html+='</div>';
 }
-guideList.innerHTML=html;
+guideList.innerHTML='<div id="tv2-guide-spacer" style="height:'+(count*rowHeight)+'px"></div><div id="tv2-guide-rows" style="transform:translateY('+(start*rowHeight)+'px)">'+html+'</div>';
 }
 
 function scrollGuideTo(i){
-var row=document.getElementById('gr-'+i);
-if(row)row.scrollIntoView({block:'nearest'});
+var list=getNavIndices();
+var pos=guidePosition(i,list);
+if(pos===undefined)return;
+var rowHeight=guideRowHeight();
+// Materialize the spacer before setting scrollTop. On the first guide open,
+// there is otherwise no scroll range and the target position is clamped to 0.
+renderGuide(i);
+guideList.scrollTop=Math.max(0,pos*rowHeight-(guideList.clientHeight-rowHeight)/2);
+renderGuide();
 }
 
 guideList.addEventListener('click',function(e){
-var row=e.target.closest('[id^="gr-"]');
+var row=e.target.closest('[data-channel-index]');
 if(row){
-var idx=parseInt(row.id.replace('gr-',''),10);
+var idx=parseInt(row.dataset.channelIndex,10);
 closeGuide();
 loadChannel(idx);
 }
+});
+
+guideList.addEventListener('scroll',function(){
+if(guideOpen)renderGuide();
 });
 
 function openGuide(){
@@ -305,7 +336,6 @@ guide.classList.remove('open');
 function moveGuideHighlight(d){
 var list=getNavIndices();
 var count=list?list.length:channels.length;
-var oldIdx=guideIndex;
 if(list){
 var pos=favIndexMap[guideIndex];
 if(pos===undefined)pos=0;
@@ -314,10 +344,6 @@ guideIndex=list[pos];
 }else{
 guideIndex=(guideIndex+d+count)%count;
 }
-var oldRow=document.getElementById('gr-'+oldIdx);
-var newRow=document.getElementById('gr-'+guideIndex);
-if(oldRow)oldRow.classList.remove('highlight');
-if(newRow)newRow.classList.add('highlight');
 scrollGuideTo(guideIndex);
 }
 
@@ -347,49 +373,15 @@ function loadChannel(i){
 cancelNumber();
 currentIndex=i;
 previewIndex=-1;
-hlsRecoveryAttempts=0;
+var sequence=++loadSequence;
 
 loadingOverlay.classList.add('active');
+clearTimeout(loadingTimer);
 
-if(hls){
-hls.destroy();
-hls=null;
-}
-
-var url=channels[i].stream_url;
-function done(){loadingOverlay.classList.remove('active');}
-if(typeof Hls!=='undefined'&&Hls.isSupported()){
-if(hls){hls.destroy();}
-hls=new Hls();
-hls.loadSource(url);
-hls.attachMedia(video);
-hls.on(Hls.Events.MANIFEST_PARSED,function(){
-video.play().catch(function(){});
-done();
-});
-hls.on(Hls.Events.ERROR,function(e,d){
-if(d.fatal){
-hlsRecoveryAttempts++;
-if(hlsRecoveryAttempts<=MAX_HLS_RECOVERY){
-if(d.type===Hls.ErrorTypes.NETWORK_ERROR){
-hls.startLoad();
-}else if(d.type===Hls.ErrorTypes.MEDIA_ERROR){
-hls.recoverMediaError();
-}
-}else{
-showError('Stream unavailable');
-done();
-}
-}else{
-setTimeout(done,500);
-}
-});
-setTimeout(done,4000);
-}else{
-video.src=url;
-video.play().catch(function(){});
-setTimeout(done,4000);
-}
+var url=channels[i].player_url;
+function done(){if(sequence===loadSequence)loadingOverlay.classList.remove('active');}
+loadingTimer=setTimeout(done,4000);
+playerFrame.src=url;
 
 updateOverlay(i);
 showOverlay();
@@ -478,8 +470,7 @@ return;
 }
 localStorage.setItem('jiotvgo_server_url',url);
 try{if(window.webOSSystem)webOSSystem.setPersistence('jiotvgo_server_url',url);}catch(e){}
-if(hls){hls.destroy();hls=null;}
-video.src='';
+playerFrame.src='about:blank';
 window.location.href=url+'/tv2?_='+Date.now();
 }
 
@@ -490,24 +481,13 @@ if(e.key==='Enter'){e.preventDefault();saveConfig();}
 if(e.key==='GoBack'||e.keyCode===461){e.preventDefault();closeConfig();}
 });
 
-function playVideo(){
-if(video.paused){
-video.play().catch(function(){});
-if(hls){
-hls.startLoad();
-}
-}
-}
-
 document.addEventListener('keydown',function(e){
 if(!hasStarted){
 e.preventDefault();
 hasStarted=true;
 splash.classList.add('hidden');
 loadChannel(0);
-renderGuide();
 if(favMode)setFavMode(true);
-video.focus();
 return;
 }
 
@@ -555,8 +535,8 @@ openGuide();
 return;
 }
 
-// Yellow/F2 — toggle favorites filter (only if favorites are configured)
-if(hasFavorites&&(e.key==='Yellow'||e.key==='F2'||e.keyCode===459||e.keyCode===405)){
+// F, Yellow/F2 — toggle favourites filter (only if favourites are configured)
+if(hasFavorites&&(e.key==='f'||e.key==='F'||e.keyCode===70||e.key==='Yellow'||e.key==='F2'||e.keyCode===459||e.keyCode===405)){
 e.preventDefault();
 toggleFav();
 return;
@@ -644,8 +624,7 @@ return;
 // Back/Exit
 if(e.key==='Backspace'||e.key==='GoBack'||e.keyCode===461){
 e.preventDefault();
-if(hls){hls.destroy();hls=null;}
-video.src='';
+playerFrame.src='about:blank';
 window.history.back();
 return;
 }
