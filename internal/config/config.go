@@ -61,6 +61,12 @@ type JioTVConfig struct {
 	SimplePlayback SimplePlaybackConfig `yaml:"simple_playback" json:"simple_playback" toml:"simple_playback"`
 	// Plugins maps plugin names to their runtime config URLs. Default: empty
 	Plugins map[string]string `yaml:"plugins" env:"JIOTV_PLUGINS" json:"plugins" toml:"plugins"`
+	// TV2EPGURL is an optional XMLTV gzip source used by TV2 when the Jio EPG
+	// API has no schedule for a channel (for example, external plugin channels).
+	TV2EPGURL string `yaml:"tv2_epg_url" env:"JIOTV_TV2_EPG_URL" json:"tv2_epg_url" toml:"tv2_epg_url"`
+	// TV2EPGAlternateURL is an optional secondary XMLTV gzip source that TV2
+	// tries when the primary source has no current or upcoming schedule.
+	TV2EPGAlternateURL string `yaml:"tv2_epg_alternate_url" env:"JIOTV_TV2_EPG_ALTERNATE_URL" json:"tv2_epg_alternate_url" toml:"tv2_epg_alternate_url"`
 }
 
 // Cfg is the global config variable

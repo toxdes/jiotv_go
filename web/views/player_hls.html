@@ -30,14 +30,15 @@
   <body>
     <div id="jiotv_go_player"></div>
     <script>
+      var shouldAutoplay = {{if .autoplay_fallback}}true{{else}}false{{end}};
       var player = flowplayer("#jiotv_go_player", {
         src: "{{ .play_url }}",
         auto_orient: true,
         live: {{if .is_catchup}}false{{else}}true{{end}},
         seekable: {{if .is_catchup}}true{{else}}false{{end}},
         retry: {{if .is_catchup}}false{{else}}true{{end}},
-        autoplay: {{if .autoplay_fallback}}true{{else}}false{{end}},
-        muted: {{if .autoplay_fallback}}true{{else}}false{{end}},
+        autoplay: false,
+        muted: false,
         qsel: {},
         asel: {},
         hlsjs: {
@@ -51,6 +52,118 @@
 
       // JTV: max volume for TV remote usage
       player.volumeLevel = 1;
+
+      var tv2Hls = null;
+      function isTV2Frame() {
+        try {
+          return window.parent !== window && window.parent.location.pathname === "/tv2";
+        } catch (e) {
+          return false;
+        }
+      }
+      function isHindiAudioTrack(track) {
+        var language = String(track.lang || track.language || "").toLowerCase();
+        var label = String(track.name || track.label || "").toLowerCase();
+        return language === "hi" || language === "hin" || label.indexOf("hindi") !== -1;
+      }
+      function getTV2AudioTracks() {
+        if (tv2Hls && tv2Hls.audioTracks) {
+          return tv2Hls.audioTracks.map(function (track, index) {
+            return {
+              id: "hls:" + track.id,
+              language: track.lang || "",
+              label: track.name || track.lang || ("Audio " + (index + 1)),
+              active: tv2Hls.audioTrack === track.id
+            };
+          });
+        }
+        var video = document.querySelector("#jiotv_go_player video");
+        var tracks = video && video.audioTracks;
+        if (!tracks) return [];
+        var result = [];
+        for (var i = 0; i < tracks.length; i++) {
+          result.push({
+            id: "native:" + i,
+            language: tracks[i].language || "",
+            label: tracks[i].label || tracks[i].language || ("Audio " + (i + 1)),
+            active: !!tracks[i].enabled
+          });
+        }
+        return result;
+      }
+      function selectTV2AudioTrack(id) {
+        var value = String(id || "");
+        if (value.indexOf("hls:") === 0 && tv2Hls) {
+          tv2Hls.audioTrack = Number(value.slice(4));
+          return;
+        }
+        if (value.indexOf("native:") === 0) {
+          var video = document.querySelector("#jiotv_go_player video");
+          var tracks = video && video.audioTracks;
+          var selected = Number(value.slice(7));
+          if (tracks && tracks[selected]) {
+            for (var i = 0; i < tracks.length; i++) tracks[i].enabled = i === selected;
+          }
+        }
+      }
+      function publishTV2AudioTracks() {
+        if (!isTV2Frame()) return;
+        window.parent.postMessage({ type: "audioTracks", tracks: getTV2AudioTracks() }, window.location.origin);
+      }
+      function preferHindiAudio() {
+        if (!isTV2Frame()) return;
+        var tracks = getTV2AudioTracks();
+        for (var i = 0; i < tracks.length; i++) {
+          if (isHindiAudioTrack(tracks[i])) {
+            selectTV2AudioTrack(tracks[i].id);
+            break;
+          }
+        }
+      }
+      function attachTV2Hls(candidate) {
+        var hls = candidate && (candidate.hls || candidate);
+        if (!hls || !hls.audioTracks || tv2Hls === hls) return;
+        tv2Hls = hls;
+        if (window.Hls && Hls.Events) {
+          hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function () {
+            preferHindiAudio();
+            publishTV2AudioTracks();
+          });
+          hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, publishTV2AudioTracks);
+        }
+        preferHindiAudio();
+        publishTV2AudioTracks();
+      }
+      window.jiotvTV2Audio = { getTracks: getTV2AudioTracks, select: selectTV2AudioTrack };
+      player.on("hls:attached", function (event, data) {
+        attachTV2Hls((data && data.hls) ? data : event);
+      });
+      setTimeout(function () {
+        attachTV2Hls(player.hls || (player.engine && player.engine.hls));
+        preferHindiAudio();
+        publishTV2AudioTracks();
+      }, 1500);
+
+      // Mirror the DRM player's autoplay policy: try with sound first, then
+      // retry muted only when the browser rejects unmuted autoplay.
+      if (shouldAutoplay) {
+        (function tryAutoplay(attempts) {
+          var video = document.querySelector("#jiotv_go_player video");
+          if (!video) {
+            if (attempts < 100) setTimeout(function () { tryAutoplay(attempts + 1); }, 50);
+            return;
+          }
+
+          video.muted = false;
+          var playPromise = video.play();
+          if (playPromise && typeof playPromise.catch === "function") {
+            playPromise.catch(function () {
+              video.muted = true;
+              video.play().catch(function () {});
+            });
+          }
+        })(0);
+      }
 
       function initDpadRemoteSupport() {
         const playerRoot = document.querySelector(".flowplayer");

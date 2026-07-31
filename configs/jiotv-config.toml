@@ -4,6 +4,11 @@
 # Enable Or Disable EPG Generation. Default: false
 epg = false
 
+# Optional XMLTV sources for TV2 plugin-channel programme information.
+# Leave blank to use the built-in sources, or set one/both URLs to self-hosted feeds.
+tv2_epg_url = ""
+tv2_epg_alternate_url = ""
+
 # Enable Or Disable Debug Mode. Default: false
 debug = false
 

@@ -176,7 +176,8 @@ func (p *Plugin) PlayerHandler(c *fiber.Ctx) error {
 	playURL := "/" + p.Name + "/" + id + ".m3u8"
 	internalUtils.SetCacheHeader(c, 3600)
 	return c.Render("views/player_hls", fiber.Map{
-		"play_url": playURL,
+		"play_url":          playURL,
+		"autoplay_fallback": c.Query("af") == "1",
 	})
 }
 

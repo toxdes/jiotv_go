@@ -226,6 +226,51 @@
           },
         });
 
+        const isTV2Frame = () => {
+          try {
+            return window.parent !== window && window.parent.location.pathname === "/tv2";
+          } catch (e) {
+            return false;
+          }
+        };
+
+        const isHindiAudio = (track) => {
+          const language = String(track.language || "").toLowerCase();
+          const label = String(track.label || "").toLowerCase();
+          return language === "hi" || language === "hin" || label.includes("hindi");
+        };
+
+        const getTV2AudioTracks = () => {
+          const activeVariants = player.getVariantTracks().filter((track) => track.active);
+          return player.getAudioLanguagesAndRoles().map((track) => ({
+            id: track.language + "|" + (track.role || ""),
+            language: track.language,
+            label: track.label || track.language,
+            active: activeVariants.some((variant) => variant.language === track.language && (!track.role || (variant.audioRoles || []).includes(track.role))),
+          }));
+        };
+
+        const selectTV2AudioTrack = (id) => {
+          const parts = String(id || "").split("|");
+          if (parts[0]) player.selectAudioLanguage(parts[0], parts[1] || "");
+        };
+
+        const publishTV2AudioTracks = () => {
+          if (!isTV2Frame()) return;
+          window.parent.postMessage({ type: "audioTracks", tracks: getTV2AudioTracks() }, window.location.origin);
+        };
+
+        window.jiotvTV2Audio = {
+          getTracks: getTV2AudioTracks,
+          select: selectTV2AudioTrack,
+        };
+
+        const preferHindiAudio = () => {
+          if (!isTV2Frame()) return;
+          const hindiTrack = player.getAudioLanguagesAndRoles().find(isHindiAudio);
+          if (hindiTrack) player.selectAudioLanguage(hindiTrack.language, hindiTrack.role || "");
+        };
+
         const RequestType = shaka.net.NetworkingEngine.RequestType;
         let requestCount = 0;
 
@@ -293,6 +338,8 @@
 
         try {
           await player.load("{{ .play_url }}");
+          preferHindiAudio();
+          publishTV2AudioTracks();
           try {
             video.muted = false;
             await video.play();
@@ -311,6 +358,8 @@
           console.error("Error loading video", e);
           fallbackToHLS("player.load failed: " + (e && e.code ? e.code : "unknown"));
         }
+
+        player.addEventListener("trackschanged", publishTV2AudioTracks);
 
         if (isWindows) {
           setTimeout(() => {
