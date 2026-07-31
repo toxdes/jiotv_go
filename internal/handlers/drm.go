@@ -333,6 +333,7 @@ func LiveMpdHandler(c *fiber.Ctx) error {
 	// Get channel ID from URL
 	channelID := c.Params("channelID")
 	quality := c.Query("q")
+	autoplayFallback := c.Query("af") == "1"
 	playerMode := c.Query("pm") // "hd" (force Shaka) or "auto" (try Shaka, fallback HLS)
 	if quality == "" {
 		quality = "auto"
@@ -349,7 +350,8 @@ func LiveMpdHandler(c *fiber.Ctx) error {
 		}
 		internalUtils.SetCacheHeader(c, 3600)
 		return c.Render("views/player_hls", fiber.Map{
-			"play_url": channel.URL,
+			"play_url":          channel.URL,
+			"autoplay_fallback": autoplayFallback,
 		})
 	}
 
@@ -393,7 +395,8 @@ func LiveMpdHandler(c *fiber.Ctx) error {
 		play_url := utils.BuildHLSPlayURL(quality, channelID)
 		internalUtils.SetCacheHeader(c, 3600)
 		return c.Render("views/player_hls", fiber.Map{
-			"play_url": play_url,
+			"play_url":          play_url,
+			"autoplay_fallback": autoplayFallback,
 		})
 	}
 

@@ -47,6 +47,19 @@
     if (video && !video.paused) video.pause();
   }
 
+  function isTV2Frame() {
+    try {
+      return window.parent !== window && window.parent.location.pathname === "/tv2";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function sendAudioTracks() {
+    if (!isTV2Frame() || !window.jiotvTV2Audio) return;
+    postToParent({ type: "audioTracks", tracks: window.jiotvTV2Audio.getTracks() || [] });
+  }
+
   // ── Parent commands ────────────────────────────────────────────────
 
   window.addEventListener("message", function (e) {
@@ -60,6 +73,15 @@
         break;
       case "pause":
         doPause();
+        break;
+      case "getAudioTracks":
+        sendAudioTracks();
+        break;
+      case "selectAudioTrack":
+        if (isTV2Frame() && window.jiotvTV2Audio) {
+          window.jiotvTV2Audio.select(e.data.id);
+          setTimeout(sendAudioTracks, 100);
+        }
         break;
     }
   });

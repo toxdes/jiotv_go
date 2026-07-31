@@ -9,6 +9,7 @@ import (
 	"github.com/jiotv-go/jiotv_go/v3/internal/constants"
 	"github.com/jiotv-go/jiotv_go/v3/internal/handlers"
 	"github.com/jiotv-go/jiotv_go/v3/internal/middleware"
+	"github.com/jiotv-go/jiotv_go/v3/internal/plugins"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/epg"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/scheduler"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/utils"
@@ -107,6 +108,7 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	app.Get("/", handlers.IndexHandler)
 	app.Get("/tv", handlers.TVIndexHandler)            // JTV: TV-optimized channel grid
 	app.Get("/tv/play/:id", handlers.TVPlayHandler)    // JTV: TV-optimized player page
+	app.Get("/tv2", handlers.TV2Handler)               // TV2: Tata Sky-style fullscreen player
 	app.Post("/login/sendOTP", handlers.LoginSendOTPHandler)
 	app.Post("/login/verifyOTP", handlers.LoginVerifyOTPHandler)
 	app.Get("/logout", handlers.LogoutHandler)
@@ -128,6 +130,7 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	app.Get("/jtvimage/:file", handlers.ImageHandler)
 	app.Get("/epg.xml.gz", handlers.EPGHandler)
 	app.Get("/epg/:channelID/:offset", handlers.WebEPGHandler)
+	app.Get("/tv2/epg/:channelID", handlers.TV2EPGHandler)
 	app.Get("/jtvposter/:date/:file", handlers.PosterHandler)
 	app.Get("/mpd/:channelID", handlers.LiveMpdHandler)
 	app.Post("/drm", handlers.DRMKeyHandler)
@@ -135,6 +138,9 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 
 	app.Get("/render.mpd", handlers.MpdHandler)
 	app.Use("/render.dash", handlers.DashHandler)
+
+	// Plugin routes
+	plugins.Init(app)
 
 	if jiotvServerConfig.TLS {
 		if jiotvServerConfig.TLSCertPath == "" || jiotvServerConfig.TLSKeyPath == "" {

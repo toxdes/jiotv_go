@@ -8,6 +8,21 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
+// SimplePlaybackConfig controls the simple HLS proxy mode.
+// When enabled, this mode replaces the encrypted URL pipeline with a simpler
+// approach that passes cookie/auth data as plain URL params and does not
+// manage HDNEA or DRM.
+type SimplePlaybackConfig struct {
+	// Enable simple proxy mode. Default: false
+	Enabled bool `yaml:"enabled" env:"JIOTV_SIMPLE_PLAYBACK" json:"enabled" toml:"enabled"`
+	// AES-128-CBC encryption key for URL params (32 hex chars = 16 bytes).
+	// Leave empty to auto-generate a random key on startup.
+	CryptoKey string `yaml:"crypto_key" env:"JIOTV_SIMPLE_CRYPTO_KEY" json:"crypto_key" toml:"crypto_key"`
+	// Fallback M3U8 stream URL used when a channel's live URL cannot be fetched.
+	// Defaults to a Twitter fallback stream.
+	FallbackURL string `yaml:"fallback_url" env:"JIOTV_SIMPLE_FALLBACK_URL" json:"fallback_url" toml:"fallback_url"`
+}
+
 // JioTVConfig defines the configuration options for the JioTV client.
 // It includes options for enabling features like EPG, debug mode, DRM, etc.
 // As well as configuration for credentials, proxies, file paths and more.
@@ -42,6 +57,16 @@ type JioTVConfig struct {
 	DefaultLanguages []int `yaml:"default_languages" env:"JIOTV_DEFAULT_LANGUAGES" json:"default_languages" toml:"default_languages"`
 	// FavoriteChannelIDs is the list of channel IDs to be marked as favorites. Default: []
 	FavoriteChannelIDs []string `yaml:"favorite_channel_ids" env:"JIOTV_FAVORITE_CHANNEL_IDS" json:"favorite_channel_ids" toml:"favorite_channel_ids"`
+	// SimplePlayback enables the simple HLS proxy mode. Default: false
+	SimplePlayback SimplePlaybackConfig `yaml:"simple_playback" json:"simple_playback" toml:"simple_playback"`
+	// Plugins maps plugin names to their runtime config URLs. Default: empty
+	Plugins map[string]string `yaml:"plugins" env:"JIOTV_PLUGINS" json:"plugins" toml:"plugins"`
+	// TV2EPGURL is an optional XMLTV gzip source used by TV2 when the Jio EPG
+	// API has no schedule for a channel (for example, external plugin channels).
+	TV2EPGURL string `yaml:"tv2_epg_url" env:"JIOTV_TV2_EPG_URL" json:"tv2_epg_url" toml:"tv2_epg_url"`
+	// TV2EPGAlternateURL is an optional secondary XMLTV gzip source that TV2
+	// tries when the primary source has no current or upcoming schedule.
+	TV2EPGAlternateURL string `yaml:"tv2_epg_alternate_url" env:"JIOTV_TV2_EPG_ALTERNATE_URL" json:"tv2_epg_alternate_url" toml:"tv2_epg_alternate_url"`
 }
 
 // Cfg is the global config variable

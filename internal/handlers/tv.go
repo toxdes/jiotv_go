@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jiotv-go/jiotv_go/v3/internal/config"
+	"github.com/jiotv-go/jiotv_go/v3/internal/plugins"
 	internalUtils "github.com/jiotv-go/jiotv_go/v3/internal/utils"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/television"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/utils"
@@ -20,29 +21,74 @@ func TVIndexHandler(c *fiber.Ctx) error {
 		return ErrorMessageHandler(c, err)
 	}
 
+	if len(config.Cfg.Plugins) > 0 {
+		pluginChannels := plugins.GetChannels()
+		channels.Result = append(channels.Result, pluginChannels...)
+	}
+
 	quality := c.Query("q")
 	if quality == "" {
 		quality = "auto"
 	}
 
 	hostURL := c.Protocol() + "://" + c.Hostname()
-	for i, channel := range channels.Result {
-		if strings.HasPrefix(channel.LogoURL, "http://") || strings.HasPrefix(channel.LogoURL, "https://") {
-			channels.Result[i].LogoURL = channel.LogoURL
-		} else {
-			channels.Result[i].LogoURL = hostURL + "/jtvimage/" + channel.LogoURL
-		}
-	}
 
+	// Apply filters first, then build the enriched channel list
 	language := c.Query("language")
 	category := c.Query("category")
+
+	displayChannels := channels.Result
+	if language != "" || category != "" {
+		lang, err := strconv.Atoi(language)
+		if err != nil {
+			return ErrorMessageHandler(c, err)
+		}
+		cat, err := strconv.Atoi(category)
+		if err != nil {
+			return ErrorMessageHandler(c, err)
+		}
+		displayChannels = television.FilterChannels(displayChannels, lang, cat)
+	} else if len(config.Cfg.DefaultCategories) > 0 || len(config.Cfg.DefaultLanguages) > 0 {
+		displayChannels = television.FilterChannelsByDefaults(displayChannels, config.Cfg.DefaultCategories, config.Cfg.DefaultLanguages)
+	}
+
+	// Enrich with logo URLs and player URLs
+	type tvChannel struct {
+		television.Channel
+		PlayerURL string `json:"player_url"`
+		StreamURL string `json:"stream_url"`
+	}
+	tvChannels := make([]tvChannel, len(displayChannels))
+	for i, ch := range displayChannels {
+		var logoURL string
+		if strings.HasPrefix(ch.LogoURL, "http://") || strings.HasPrefix(ch.LogoURL, "https://") {
+			logoURL = ch.LogoURL
+		} else {
+			logoURL = hostURL + "/jtvimage/" + ch.LogoURL
+		}
+		var playURL string
+		var streamURL string
+		if ch.IsCustom && ch.PluginID != "" {
+			playURL = "/" + ch.PluginID + "/player/" + ch.ID + "?q=auto"
+			streamURL = "/" + ch.PluginID + "/" + ch.ID
+		} else {
+			playURL = "/player/" + ch.ID + "?q=auto"
+			streamURL = utils.BuildHLSPlayURL("auto", ch.ID)
+		}
+		tvChannels[i] = tvChannel{
+			Channel:   ch,
+			PlayerURL: playURL,
+			StreamURL: streamURL,
+		}
+		tvChannels[i].LogoURL = logoURL
+	}
 
 	// Never cache the TV page — stale data breaks fav filter
 	internalUtils.SetCacheHeader(c, 0)
 
-	tvContext := fiber.Map{
+	return c.Render("views/tv_index", fiber.Map{
 		"Title":              Title,
-		"Channels":           nil,
+		"Channels":           tvChannels,
 		"Categories":         television.CategoryMap,
 		"Languages":          television.LanguageMap,
 		"FavoriteChannelIDs": config.Cfg.FavoriteChannelIDs,
@@ -52,30 +98,7 @@ func TVIndexHandler(c *fiber.Ctx) error {
 			"medium": "Medium",
 			"low":    "Low",
 		},
-	}
-
-	if language != "" || category != "" {
-		language_int, err := strconv.Atoi(language)
-		if err != nil {
-			return ErrorMessageHandler(c, err)
-		}
-		category_int, err := strconv.Atoi(category)
-		if err != nil {
-			return ErrorMessageHandler(c, err)
-		}
-		channels_list := television.FilterChannels(channels.Result, language_int, category_int)
-		tvContext["Channels"] = channels_list
-		return c.Render("views/tv_index", tvContext)
-	}
-
-	if len(config.Cfg.DefaultCategories) > 0 || len(config.Cfg.DefaultLanguages) > 0 {
-		channels_list := television.FilterChannelsByDefaults(channels.Result, config.Cfg.DefaultCategories, config.Cfg.DefaultLanguages)
-		tvContext["Channels"] = channels_list
-		return c.Render("views/tv_index", tvContext)
-	}
-
-	tvContext["Channels"] = channels.Result
-	return c.Render("views/tv_index", tvContext)
+	})
 }
 
 // TVPlayHandler serves the TV-optimized player page with fullscreen iframe.
@@ -105,7 +128,9 @@ func TVPlayHandler(c *fiber.Ctx) error {
 	}
 
 	var player_url string
-	if EnableDRM {
+	if pluginID, ok := plugins.GetChannelPluginID(id); ok {
+		player_url = "/" + pluginID + "/player/" + id + "?q=" + quality
+	} else if EnableDRM {
 		if utils.ContainsString(id, SONY_LIST) {
 			player_url = "/mpd/" + id + "?q=" + quality
 		} else if isCustomChannel(id) {

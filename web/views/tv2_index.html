@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>{{.Title}}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;-webkit-user-select:none;user-select:none}
+#tv2-player{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000;outline:none;pointer-events:none}
+#tv2-overlay{position:fixed;bottom:5rem;left:50%;transform:translateX(-50%);width:90vw;max-width:120rem;padding:2.2rem 4.5rem;background:rgba(0,0,0,.88);border-radius:2.25rem;color:#fff;opacity:0;transition:opacity .1s;will-change:opacity;pointer-events:none;z-index:100;contain:layout style}
+#tv2-overlay.active{opacity:1}
+#tv2-channel-summary{display:flex;align-items:center;gap:3.75rem;min-width:0}
+#tv2-ch-number{font-size:6.6rem;font-weight:800;min-width:7.5rem;text-align:center;letter-spacing:.05em}
+#tv2-ch-name{flex:1;min-width:0;font-size:4.2rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tv2-nav-hints{flex-shrink:0;font-size:3rem;opacity:.5;letter-spacing:.4rem}
+#tv2-current-time{flex-shrink:0;font-size:3.4rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+#tv2-fav-star{flex-shrink:0;font-size:3.4rem;color:#ffd700;opacity:0;transition:opacity .1s;pointer-events:none}
+#tv2-fav-star.active{opacity:1}
+#tv2-programmes{margin:1.5rem 0 0;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.18);min-height:14.7rem;overflow:hidden}
+.tv2-programme-row{display:grid;grid-template-columns:20ch minmax(0,1fr);align-items:center;column-gap:2rem;height:4.5rem;padding:0;border-radius:0;font-size:2.625rem}
+.tv2-programme-time{color:rgba(255,255,255,.6);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tv2-programme-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv2-programme-row.current{position:relative;background:rgba(234,67,53,.22);color:#fff}
+.tv2-programme-row.current::after{content:"";position:absolute;left:0;bottom:0;width:var(--programme-progress,0%);height:.35rem;background:#ea4335;transition:width 60s linear}
+.tv2-programme-row.current>span{position:relative;z-index:1}
+.tv2-programme-row.selected{box-shadow:inset 0 0 0 2px #ea4335;background:rgba(234,67,53,.35)}
+.tv2-programme-status{height:9rem;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);font-size:1.6rem}
+#tv2-num-overlay{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(234,67,53,.92);color:#fff;font-size:5rem;font-weight:800;padding:1rem 2.5rem;border-radius:1.5rem;z-index:200;pointer-events:none;opacity:0;transition:opacity .1s;text-shadow:0 2px 4px rgba(0,0,0,.5)}
+#tv2-num-overlay.active{opacity:1}
+#tv2-num-overlay.invalid{opacity:.4}
+#tv2-splash{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;color:#fff}
+#tv2-splash-icon{width:300px;height:300px;border-radius:2rem}
+#tv2-splash span{font-size:1.8rem;font-weight:600;background:rgba(234,67,53,.2);border:2px solid rgba(234,67,53,.6);border-radius:1rem;padding:1.5rem 3rem}
+#tv2-splash.hidden{display:none}
+#tv2-loading{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;opacity:0;pointer-events:none}
+#tv2-loading.active{opacity:1}
+#tv2-loading img{width:300px;height:300px;border-radius:2rem}
+#tv2-loading span{font-size:1.8rem;font-weight:600;background:rgba(234,67,53,.2);border:2px solid rgba(234,67,53,.6);border-radius:1rem;padding:1.5rem 3rem;color:#fff}
+#tv2-error{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:95;background:rgba(234,67,53,.92);color:#fff;font-size:1.6rem;font-weight:600;padding:1rem 2rem;border-radius:1rem;opacity:0;pointer-events:none;white-space:nowrap;transition:opacity .1s}
+#tv2-error.active{opacity:1}
+#tv2-guide{position:fixed;top:0;left:0;bottom:0;width:63rem;max-width:85vw;background:rgba(16,16,16,.95);z-index:150;overflow:hidden;display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .18s ease;will-change:transform;border-right:1px solid rgba(255,255,255,.08)}
+#tv2-guide.open{transform:translateX(0)}
+#tv2-guide-header{padding:2.1rem 2.6rem;font-size:2.8rem;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;letter-spacing:.03em}
+#tv2-guide-list{flex:1;position:relative;overflow-y:auto;overflow-x:hidden;padding:.7rem 0;contain:strict}
+#tv2-guide-list::-webkit-scrollbar{width:7px}
+#tv2-guide-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+#tv2-guide-spacer{width:1px;pointer-events:none}
+#tv2-guide-rows{position:absolute;top:.7rem;left:0;right:0}
+.tv2-guide-row{display:flex;align-items:center;gap:1.8rem;padding:1.2rem 2.6rem;cursor:pointer;border-left:5px solid transparent;transition:background .04s,border-color .04s;height:9.1rem}
+.tv2-guide-row.highlight{background:rgba(234,67,53,.25);border-left-color:#ea4335}
+.tv2-guide-row.active{background:rgba(255,255,255,.07);border-left-color:rgba(255,255,255,.2)}
+#tv2-guide-footer{padding:1.4rem 2.6rem;font-size:1.9rem;color:rgba(255,255,255,.35);border-top:1px solid rgba(255,255,255,.08);flex-shrink:0;text-align:center;letter-spacing:.05em}
+#tv2-audio-popup{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:180;width:46rem;max-width:88vw;background:rgba(16,16,16,.97);border:1px solid rgba(255,255,255,.18);display:none;color:#fff}
+#tv2-audio-popup.active{display:block}
+#tv2-audio-title{padding:1.8rem 2.2rem;font-size:2.5rem;font-weight:700;border-bottom:1px solid rgba(255,255,255,.14)}
+#tv2-audio-list{min-height:7rem;max-height:34rem;overflow:hidden}
+.tv2-audio-row{height:5.4rem;padding:0 2.2rem;display:flex;align-items:center;font-size:2.2rem;text-transform:uppercase}
+.tv2-audio-row.active{color:#ffd700}
+.tv2-audio-row.selected{background:#ea4335;color:#fff}
+#tv2-audio-status{height:7rem;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:1.7rem}
+#tv2-audio-footer{padding:1.3rem 2.2rem;border-top:1px solid rgba(255,255,255,.14);font-size:1.5rem;color:rgba(255,255,255,.5);text-align:center}
+#tv2-info-bar{position:fixed;top:0;left:0;right:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.5rem;opacity:.4;color:#fff;font-size:1.3rem;pointer-events:none;contain:layout style}
+#tv2-info-bar .ch-name{font-weight:600;font-size:1.6rem;text-shadow:0 1px 4px rgba(0,0,0,.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:30vw}
+#tv2-info-bar .ch-mode{font-size:1.1rem;color:rgba(255,255,255,.5);margin-left:.6rem;white-space:nowrap}
+#tv2-info-bar .hints{display:flex;gap:1.2rem;align-items:center}
+#tv2-info-bar .key{display:inline-flex;align-items:center;gap:.35rem}
+#tv2-info-bar .sq{display:inline-block;width:1.4rem;height:1.4rem;border-radius:.25rem;flex-shrink:0}
+#tv2-info-bar .sq.green{background:#2ecc71}
+#tv2-info-bar .sq.yellow{background:#f1c40f}
+#tv2-info-bar .sq.red{background:#e74c3c}
+#tv2-info-bar .sq.blue{background:#3498db}
+#tv2-setup-overlay{position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:2rem;color:#fff}
+#tv2-setup-overlay.active{display:flex}
+#tv2-setup-overlay .title{font-size:2.4rem;font-weight:700;color:#ea4335}
+#tv2-setup-overlay .st-label{font-size:1.4rem;opacity:.7}
+#tv2-setup-overlay input{width:50rem;max-width:85vw;height:4rem;padding:0 1.2rem;border:2px solid #30363d;border-radius:.75rem;background:#161b22;color:#e6edf3;font-size:1.6rem;outline:none;text-align:center}
+#tv2-setup-overlay input:focus{border-color:#ea4335}
+#tv2-setup-overlay .hint{font-size:1.1rem;opacity:.4}
+#tv2-setup-overlay .actions{display:flex;gap:1.5rem}
+#tv2-setup-overlay .actions button{height:3.5rem;padding:0 2.5rem;border:none;border-radius:.75rem;font-size:1.4rem;font-weight:600;cursor:pointer;outline:none}
+#tv2-setup-overlay .actions .save{background:#ea4335;color:#fff}
+#tv2-setup-overlay .actions .cancel{background:#30363d;color:#e6edf3}
+#tv2-setup-overlay .error{font-size:1.2rem;color:#ea4335;display:none}
+</style>
+</head>
+<body>
+
+<iframe id="tv2-player" tabindex="-1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+
+<div id="tv2-info-bar">
+<span><span class="ch-name" id="tv2-info-ch-name"></span><span class="ch-mode" id="tv2-info-mode"></span></span>
+<span class="hints">
+<span class="key"><span class="sq green"></span> Guide</span>
+<span class="key"><span class="sq yellow"></span> F / Favourites</span>
+<span class="key"><span class="sq blue"></span> Audio</span>
+<span class="key"><span class="sq red"></span> Config</span>
+<span class="key">◄► Browse</span>
+</span>
+</div>
+
+<div id="tv2-overlay">
+<div id="tv2-channel-summary">
+<span id="tv2-ch-number"></span>
+<span id="tv2-ch-name"></span>
+<span id="tv2-current-time"></span>
+<span id="tv2-fav-star">★</span>
+<span id="tv2-nav-hints">◄  ►</span>
+</div>
+<div id="tv2-programmes" role="table" aria-label="Programme guide"></div>
+</div>
+
+<div id="tv2-num-overlay"></div>
+
+<div id="tv2-guide">
+<div id="tv2-guide-header">CHANNEL GUIDE</div>
+<div id="tv2-guide-list"></div>
+<div id="tv2-guide-footer">▲▼ Navigate  Enter Open  G/Exit Close</div>
+</div>
+
+<div id="tv2-audio-popup" role="dialog" aria-label="Audio language">
+<div id="tv2-audio-title">AUDIO LANGUAGE</div>
+<div id="tv2-audio-list"></div>
+<div id="tv2-audio-footer">▲▼ Select &nbsp; Enter Apply &nbsp; Blue/L Close</div>
+</div>
+
+<div id="tv2-splash"><img id="tv2-splash-icon" src="/static/img/app_icon_splash.png" alt=""><span id="tv2-splash-text"></span></div>
+
+<div id="tv2-loading"><img id="tv2-loading-icon" src="/static/img/app_icon_splash.png" alt=""><span>Loading…</span></div>
+
+<div id="tv2-error"></div>
+
+<div id="tv2-setup-overlay">
+<div class="title">Server Configuration</div>
+<div class="st-label">Enter your JioTV Go server URL</div>
+<input id="tv2-setup-url" type="url" placeholder="http://192.168.1.100:5001">
+<div class="error" id="tv2-setup-error"></div>
+<div class="hint">Hold Red button to open this panel</div>
+<div class="actions">
+<button class="save" id="tv2-setup-save">Save &amp; Connect</button>
+<button class="cancel" id="tv2-setup-cancel">Cancel</button>
+</div>
+</div>
+
+<script>
+window.TV2_CHANNELS={{.ChannelsJSON}};
+window.TV2_FAV_IDS=[{{range $i,$id:=.FavoriteChannelIDs}}{{if $i}},{{end}}"{{$id}}"{{end}}];
+</script>
+
+<script>
+(function(){
+var channels=window.TV2_CHANNELS;
+if(!channels||!channels.length){
+document.getElementById('tv2-splash').innerHTML='<span>No channels available</span>';
+return;
+}
+
+var playerFrame=document.getElementById('tv2-player');
+var overlay=document.getElementById('tv2-overlay');
+var chNum=document.getElementById('tv2-ch-number');
+var chName=document.getElementById('tv2-ch-name');
+var currentTime=document.getElementById('tv2-current-time');
+var favStar=document.getElementById('tv2-fav-star');
+var programmes=document.getElementById('tv2-programmes');
+var numOverlay=document.getElementById('tv2-num-overlay');
+var splash=document.getElementById('tv2-splash');
+var guide=document.getElementById('tv2-guide');
+var guideList=document.getElementById('tv2-guide-list');
+var guideHeader=document.getElementById('tv2-guide-header');
+var loadingOverlay=document.getElementById('tv2-loading');
+var splashText=document.getElementById('tv2-splash-text');
+var audioPopup=document.getElementById('tv2-audio-popup');
+var audioList=document.getElementById('tv2-audio-list');
+
+// Server-configured favorite channel IDs (from config.toml)
+var favIds=window.TV2_FAV_IDS||[];
+var hasFavorites=favIds.length>0;
+// Precompute fast lookup tables — O(1) instead of indexOf scans
+var favIndexMap={}; // channels index → position in fav list
+var isFavTable={};  // channels index → boolean
+var favIndices=[];  // ordered list of fav channel indices — follows config order
+for(var j=0;j<favIds.length;j++){
+var id=favIds[j];
+for(var i=0;i<channels.length;i++){
+if(channels[i].channel_id===id){
+favIndexMap[i]=favIndices.length;
+isFavTable[i]=true;
+favIndices.push(i);
+break;
+}
+}
+}
+
+var currentIndex=0;
+var previewIndex=-1;
+var hasStarted=typeof window.webOSSystem!=='undefined';
+var numBuffer='';
+var numTimer=null;
+var overlayTimer=null;
+var loadingTimer=null;
+var loadSequence=0;
+var guideOpen=false;
+var guideIndex=0;
+var guideRenderSignature='';
+var GUIDE_BUFFER_ROWS=8;
+// A configured favourites list is the TV2 startup view. The Yellow button can
+// still switch views during a session, but a restart always returns here.
+var favMode=hasFavorites;
+var NUM_TIMEOUT=1500;
+var errorEl=document.getElementById('tv2-error');
+var _redTimer=null;
+var programmeItems=[];
+var programmeScrollIndex=0;
+var programmeSelectedIndex=-1;
+var programmeRequest=0;
+var programmeLoading=false;
+var programmeCache={};
+var PROGRAMME_VISIBLE_ROWS=3;
+var PROGRAMME_CACHE_TTL=5*60*1000;
+var audioOpen=false;
+var audioTracks=[];
+var audioSelectedIndex=0;
+
+playerFrame.addEventListener('load',function(){
+loadingOverlay.classList.remove('active');
+});
+
+// Plugin HLS players report readiness through player_tv.js and wait for their
+// TV-page parent to request playback. This is the same handshake used by /tv.
+function sendPlayerCommand(type,data){
+if(playerFrame.contentWindow){
+var message={type:type};
+if(data)for(var key in data)message[key]=data[key];
+playerFrame.contentWindow.postMessage(message,window.location.origin);
+}
+}
+
+window.addEventListener('message',function(e){
+if(e.source!==playerFrame.contentWindow||!e.data||typeof e.data.type!=='string')return;
+if(e.data.type==='ready'){
+sendPlayerCommand('play');
+}
+if(e.data.type==='playing'){
+loadingOverlay.classList.remove('active');
+}
+if(e.data.type==='audioTracks'){
+audioTracks=Array.isArray(e.data.tracks)?e.data.tracks:[];
+for(var i=0;i<audioTracks.length;i++)if(audioTracks[i].active){audioSelectedIndex=i;break;}
+if(audioOpen)renderAudioTracks();
+}
+});
+
+// On WebOS IPK (native HLS), autoplay works without gesture — start immediately with loading splash
+if(hasStarted){
+splashText.textContent='Loading…';
+loadChannel(favMode&&favIndices.length?favIndices[0]:0);
+setFavMode(favMode);
+setTimeout(function(){splash.classList.add('hidden');},600);
+}else{
+splashText.textContent='Press any key to start';
+}
+
+function isFavChannel(idx){
+return isFavTable[idx]||false;
+}
+
+function setFavMode(active){
+favMode=active;
+localStorage.setItem('tv2_fav_mode',favMode?'true':'');
+document.getElementById('tv2-info-mode').textContent=favMode?'Channels: Favourites':'Channels: All';
+guideHeader.textContent=favMode?'FAVOURITES':'CHANNEL GUIDE';
+if(favMode){
+if(!isFavChannel(currentIndex)&&favIndices.length){
+loadChannel(favIndices[0]);
+return;
+}
+}
+updateFavStar();
+showOverlay();
+if(guideOpen)renderGuide(guideIndex);
+}
+
+function toggleFav(){
+if(!hasFavorites)return;
+setFavMode(!favMode);
+}
+
+function getNavIndices(){
+return favMode&&favIndices.length?favIndices:null;
+}
+
+function navPrev(idx){
+var list=getNavIndices();
+if(list){
+var pos=favIndexMap[idx];
+if(pos===undefined)pos=0;
+return pos>0?list[pos-1]:list[list.length-1];
+}
+return idx>0?idx-1:channels.length-1;
+}
+
+function navNext(idx){
+var list=getNavIndices();
+if(list){
+var pos=favIndexMap[idx];
+if(pos===undefined)pos=-1;
+return pos<list.length-1?list[pos+1]:list[0];
+}
+return idx<channels.length-1?idx+1:0;
+}
+
+function displayNumber(i){
+var list=getNavIndices();
+if(list){
+var pos=favIndexMap[i];
+return pos!==undefined?String(pos+1):String(i+1);
+}
+return String(i+1);
+}
+
+function updateFavStar(){
+favStar.classList.toggle('active',favMode);
+}
+
+function updateOverlay(i){
+var ch=channels[i];
+chNum.textContent=displayNumber(i);
+chName.textContent=uppercaseOverlayText(ch.channel_name||'');
+updateFavStar();
+}
+
+function updatePlayingChannelInfo(){
+document.getElementById('tv2-info-ch-name').textContent=channels[currentIndex].channel_name||'';
+}
+
+function uppercaseOverlayText(value){
+return String(value).toUpperCase();
+}
+
+function formatProgrammeTime(epoch){
+var date=new Date(epoch);
+var hours=date.getHours();
+var minutes=date.getMinutes();
+var suffix=hours>=12?'PM':'AM';
+hours=hours%12||12;
+return String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+' '+suffix;
+}
+
+function formatProgrammeRange(programme){
+return formatProgrammeTime(programme.startEpoch)+' - '+formatProgrammeTime(programme.endEpoch);
+}
+
+function updateOverlayClock(){
+currentTime.textContent=formatProgrammeTime(Date.now());
+if(programmeItems.length&&!programmeLoading)renderProgrammes();
+setTimeout(updateOverlayClock,60000-(Date.now()%60000));
+}
+updateOverlayClock();
+
+function renderProgrammes(){
+programmes.innerHTML='';
+if(programmeLoading){
+programmes.innerHTML='<div class="tv2-programme-status">Loading programme guide…</div>';
+return;
+}
+if(!programmeItems.length){
+programmes.innerHTML='<div class="tv2-programme-status">Programme Information Not Available</div>';
+return;
+}
+for(var i=programmeScrollIndex;i<Math.min(programmeScrollIndex+PROGRAMME_VISIBLE_ROWS,programmeItems.length);i++){
+var programme=programmeItems[i];
+var row=document.createElement('div');
+row.className='tv2-programme-row';
+var now=Date.now();
+if(programme.startEpoch<=now&&now<programme.endEpoch){
+row.className+=' current';
+row.style.setProperty('--programme-progress',Math.max(0,Math.min(100,(now-programme.startEpoch)*100/(programme.endEpoch-programme.startEpoch)))+'%');
+}
+if(i===programmeSelectedIndex)row.className+=' selected';
+row.setAttribute('role','row');
+var time=document.createElement('span');
+time.className='tv2-programme-time';
+time.setAttribute('role','cell');
+time.textContent=formatProgrammeRange(programme);
+var title=document.createElement('span');
+title.className='tv2-programme-title';
+title.setAttribute('role','cell');
+title.textContent=uppercaseOverlayText(programme.showname||'Programme details unavailable');
+row.appendChild(time);
+row.appendChild(title);
+programmes.appendChild(row);
+}
+}
+
+function resetProgrammePosition(){
+programmeScrollIndex=0;
+programmeSelectedIndex=-1;
+renderProgrammes();
+}
+
+function normaliseProgrammeData(data){
+var now=Date.now();
+var epg=data&&Array.isArray(data.epg)?data.epg:[];
+var result=[];
+for(var i=0;i<epg.length;i++){
+var programme=epg[i];
+var start=Number(programme.startEpoch);
+var end=Number(programme.endEpoch);
+if(isFinite(start)&&isFinite(end)&&end>now&&programme.showname){
+result.push({startEpoch:start,endEpoch:end,showname:programme.showname});
+}
+}
+result.sort(function(a,b){return a.startEpoch-b.startEpoch;});
+return result;
+}
+
+function getProgrammeJSON(url){
+return fetch(url).then(function(response){
+if(!response.ok)throw new Error('EPG HTTP '+response.status);
+return response.json();
+});
+}
+
+function programmeChannelIndex(){
+return previewIndex>=0?previewIndex:currentIndex;
+}
+
+function loadProgrammeGuide(index){
+var channel=channels[index];
+var channelID=channel.channel_id;
+var requestID=++programmeRequest;
+var cached=programmeCache[channelID];
+programmeScrollIndex=0;
+programmeSelectedIndex=-1;
+programmeItems=[];
+programmeLoading=true;
+renderProgrammes();
+
+function apply(data){
+if(requestID!==programmeRequest||index!==programmeChannelIndex())return;
+programmeItems=normaliseProgrammeData(data);
+programmeLoading=false;
+renderProgrammes();
+}
+
+if(cached&&Date.now()-cached.timestamp<PROGRAMME_CACHE_TTL){
+apply(cached.data);
+return;
+}
+
+var fallback=function(){return getProgrammeJSON('/tv2/epg/'+encodeURIComponent(channelID)+'?name='+encodeURIComponent(channel.channel_name||''));};
+var epgChannelID=channel.epg_channel_id||channelID;
+var primary=/^(?:sl)?\d+$/.test(epgChannelID)?getProgrammeJSON('/epg/'+encodeURIComponent(epgChannelID)+'/0'):Promise.reject(new Error('XMLTV channel'));
+primary.then(function(data){
+if(normaliseProgrammeData(data).length)return data;
+return fallback();
+}).catch(fallback).then(function(data){
+programmeCache[channelID]={data:data,timestamp:Date.now()};
+apply(data);
+}).catch(function(){
+if(requestID!==programmeRequest||index!==programmeChannelIndex())return;
+programmeLoading=false;
+renderProgrammes();
+});
+}
+
+function moveProgrammeSelection(direction){
+if(!programmeItems.length)return;
+if(programmeSelectedIndex<0){
+programmeSelectedIndex=0;
+}else{
+programmeSelectedIndex=Math.max(0,Math.min(programmeItems.length-1,programmeSelectedIndex+direction));
+}
+if(programmeSelectedIndex<programmeScrollIndex)programmeScrollIndex=programmeSelectedIndex;
+if(programmeSelectedIndex>=programmeScrollIndex+PROGRAMME_VISIBLE_ROWS)programmeScrollIndex=programmeSelectedIndex-PROGRAMME_VISIBLE_ROWS+1;
+renderProgrammes();
+}
+
+function guideRowHeight(){
+return parseFloat(getComputedStyle(document.documentElement).fontSize)*9.1;
+}
+
+function guidePosition(index,list){
+return list?favIndexMap[index]:index;
+}
+
+function renderGuide(centerIndex){
+var list=getNavIndices();
+var count=list?list.length:channels.length;
+if(!count)return;
+var rowHeight=guideRowHeight();
+var visibleRows=Math.max(1,Math.ceil(guideList.clientHeight/rowHeight));
+var center=centerIndex===undefined?Math.floor(guideList.scrollTop/rowHeight)+(visibleRows>>1):guidePosition(centerIndex,list);
+if(center===undefined)center=0;
+var start=Math.max(0,Math.min(count-visibleRows-GUIDE_BUFFER_ROWS*2,center-visibleRows-GUIDE_BUFFER_ROWS));
+var end=Math.min(count,start+visibleRows+GUIDE_BUFFER_ROWS*2);
+var signature=[favMode,count,start,currentIndex,guideIndex,rowHeight].join(':');
+if(signature===guideRenderSignature)return;
+guideRenderSignature=signature;
+var html='';
+for(var j=start;j<end;j++){
+var i=list?list[j]:j;
+var ch=channels[i];
+var cls='tv2-guide-row';
+if(i===currentIndex)cls+=' active';
+if(i===guideIndex)cls+=' highlight';
+html+='<div data-channel-index="'+i+'" class="'+cls+'">';
+html+='<span style="font-size:2.3rem;font-weight:700;min-width:5.3rem;text-align:right;color:rgba(255,255,255,.5);flex-shrink:0">'+(list?j+1:i+1)+'</span>';
+html+='<span style="font-size:2.3rem;font-weight:500;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+(ch.channel_name||'')+'</span>';
+html+='<span style="font-size:2.5rem;color:#ffd700;min-width:3.2rem;text-align:center;flex-shrink:0;opacity:'+(isFavChannel(i)?'1':'.3')+'">★</span>';
+html+='</div>';
+}
+guideList.innerHTML='<div id="tv2-guide-spacer" style="height:'+(count*rowHeight)+'px"></div><div id="tv2-guide-rows" style="transform:translateY('+(start*rowHeight)+'px)">'+html+'</div>';
+}
+
+function scrollGuideTo(i){
+var list=getNavIndices();
+var pos=guidePosition(i,list);
+if(pos===undefined)return;
+var rowHeight=guideRowHeight();
+// Materialize the spacer before setting scrollTop. On the first guide open,
+// there is otherwise no scroll range and the target position is clamped to 0.
+renderGuide(i);
+guideList.scrollTop=Math.max(0,pos*rowHeight-(guideList.clientHeight-rowHeight)/2);
+renderGuide();
+}
+
+guideList.addEventListener('click',function(e){
+var row=e.target.closest('[data-channel-index]');
+if(row){
+var idx=parseInt(row.dataset.channelIndex,10);
+closeGuide();
+loadChannel(idx);
+}
+});
+
+guideList.addEventListener('scroll',function(){
+if(guideOpen)renderGuide();
+});
+
+function openGuide(){
+guideOpen=true;
+guideIndex=currentIndex;
+guide.classList.add('open');
+scrollGuideTo(guideIndex);
+closeOverlay();
+cancelNumber();
+history.pushState(null,'');
+}
+
+function closeGuide(){
+guideOpen=false;
+guide.classList.remove('open');
+}
+
+function moveGuideHighlight(d){
+var list=getNavIndices();
+var count=list?list.length:channels.length;
+if(list){
+var pos=favIndexMap[guideIndex];
+if(pos===undefined)pos=0;
+pos=(pos+d+count)%count;
+guideIndex=list[pos];
+}else{
+guideIndex=(guideIndex+d+count)%count;
+}
+scrollGuideTo(guideIndex);
+}
+
+function renderAudioTracks(){
+audioList.innerHTML='';
+if(!audioTracks.length){
+audioList.innerHTML='<div id="tv2-audio-status">Loading audio languages…</div>';
+return;
+}
+for(var i=0;i<audioTracks.length;i++){
+var track=audioTracks[i];
+var row=document.createElement('div');
+row.className='tv2-audio-row';
+if(track.active)row.className+=' active';
+if(i===audioSelectedIndex)row.className+=' selected';
+row.textContent=track.label||track.language||'Unknown';
+audioList.appendChild(row);
+}
+}
+
+function openAudio(){
+cancelNumber();
+closeGuide();
+closeOverlay();
+audioOpen=true;
+audioTracks=[];
+audioSelectedIndex=0;
+audioPopup.classList.add('active');
+renderAudioTracks();
+sendPlayerCommand('getAudioTracks');
+}
+
+function closeAudio(){
+audioOpen=false;
+audioPopup.classList.remove('active');
+}
+
+function moveAudioSelection(direction){
+if(!audioTracks.length)return;
+audioSelectedIndex=(audioSelectedIndex+direction+audioTracks.length)%audioTracks.length;
+renderAudioTracks();
+}
+
+function applyAudioSelection(){
+if(!audioTracks.length)return;
+sendPlayerCommand('selectAudioTrack',{id:audioTracks[audioSelectedIndex].id});
+closeAudio();
+}
+
+function showOverlay(){
+clearTimeout(overlayTimer);
+overlay.classList.add('active');
+overlayTimer=setTimeout(function(){
+overlay.classList.remove('active');
+restoreCurrentProgrammeGuide();
+},4000);
+}
+
+function restoreCurrentProgrammeGuide(){
+var wasPreviewing=previewIndex>=0;
+previewIndex=-1;
+if(wasPreviewing){
+updateOverlay(currentIndex);
+loadProgrammeGuide(currentIndex);
+}else{
+resetProgrammePosition();
+}
+}
+
+function closeOverlay(){
+clearTimeout(overlayTimer);
+overlay.classList.remove('active');
+restoreCurrentProgrammeGuide();
+}
+
+function showError(msg){
+errorEl.textContent=msg;
+errorEl.classList.add('active');
+clearTimeout(errorEl._t);
+errorEl._t=setTimeout(function(){errorEl.classList.remove('active');},2500);
+}
+
+function loadChannel(i){
+cancelNumber();
+currentIndex=i;
+previewIndex=-1;
+var sequence=++loadSequence;
+
+loadingOverlay.classList.add('active');
+clearTimeout(loadingTimer);
+
+var url=channels[i].player_url;
+function done(){if(sequence===loadSequence)loadingOverlay.classList.remove('active');}
+loadingTimer=setTimeout(done,4000);
+playerFrame.src=url;
+
+updatePlayingChannelInfo();
+updateOverlay(i);
+loadProgrammeGuide(i);
+showOverlay();
+}
+
+function previewChannel(i){
+cancelNumber();
+previewIndex=i;
+updateOverlay(i);
+loadProgrammeGuide(i);
+showOverlay();
+}
+
+function confirmPreview(){
+if(previewIndex>=0&&previewIndex!==currentIndex){
+loadChannel(previewIndex);
+}else{
+showOverlay();
+}
+}
+
+function sendNumber(digit){
+numBuffer+=digit;
+numOverlay.textContent=numBuffer;
+numOverlay.classList.add('active');
+clearTimeout(numTimer);
+numTimer=setTimeout(commitNumber,NUM_TIMEOUT);
+}
+
+function commitNumber(){
+if(!numBuffer.length)return;
+var pos=parseInt(numBuffer,10)-1;
+numBuffer='';
+clearTimeout(numTimer);
+numTimer=null;
+var list=getNavIndices();
+var limit=list?list.length:channels.length;
+if(pos>=0&&pos<limit){
+numOverlay.classList.remove('active');
+loadChannel(list?list[pos]:pos);
+}else{
+numOverlay.classList.add('invalid');
+setTimeout(function(){
+numOverlay.classList.remove('invalid');
+numOverlay.classList.remove('active');
+},300);
+}
+}
+
+function cancelNumber(){
+numOverlay.classList.remove('active');
+numBuffer='';
+clearTimeout(numTimer);
+numTimer=null;
+}
+
+var setupOverlay=document.getElementById('tv2-setup-overlay');
+var setupInput=document.getElementById('tv2-setup-url');
+var setupError=document.getElementById('tv2-setup-error');
+
+function openConfig(){
+cancelNumber();
+closeGuide();
+closeOverlay();
+var saved=localStorage.getItem('jiotvgo_server_url');
+setupInput.value=saved||window.location.origin;
+setupError.style.display='none';
+setupOverlay.classList.add('active');
+setTimeout(function(){setupInput.focus();setupInput.select();},100);
+}
+
+function closeConfig(){
+setupOverlay.classList.remove('active');
+}
+
+function saveConfig(){
+var url=setupInput.value.trim().replace(/\/+$/,'');
+if(!url||!url.match(/^https?:\/\//i)){
+setupError.textContent='URL must start with http:// or https://';
+setupError.style.display='';
+return;
+}
+try{new URL(url);}catch(e){
+setupError.textContent='Invalid URL format';
+setupError.style.display='';
+return;
+}
+localStorage.setItem('jiotvgo_server_url',url);
+try{if(window.webOSSystem)webOSSystem.setPersistence('jiotvgo_server_url',url);}catch(e){}
+playerFrame.src='about:blank';
+window.location.href=url+'/tv2?_='+Date.now();
+}
+
+document.getElementById('tv2-setup-save').addEventListener('click',saveConfig);
+document.getElementById('tv2-setup-cancel').addEventListener('click',closeConfig);
+setupInput.addEventListener('keydown',function(e){
+if(e.key==='Enter'){e.preventDefault();saveConfig();}
+if(e.key==='GoBack'||e.keyCode===461){e.preventDefault();closeConfig();}
+});
+
+document.addEventListener('keydown',function(e){
+if(!hasStarted){
+var openAudioAfterStart=e.key==='l'||e.key==='L'||e.key==='Blue'||e.key==='ColorF3Blue'||e.key==='F3'||e.keyCode===406;
+e.preventDefault();
+hasStarted=true;
+splash.classList.add('hidden');
+loadChannel(favMode&&favIndices.length?favIndices[0]:0);
+setFavMode(favMode);
+if(openAudioAfterStart)setTimeout(openAudio,0);
+return;
+}
+
+// Config overlay is open — only allow Back/Exit to close
+if(setupOverlay.classList.contains('active')){
+if(e.key==='Backspace'||e.key==='GoBack'||e.keyCode===461){
+e.preventDefault();
+closeConfig();
+}
+e.preventDefault();
+return;
+}
+
+// Audio-language popup — Blue remote button or L opens it.
+if(audioOpen){
+if(e.key==='ArrowUp'||e.keyCode===38){e.preventDefault();moveAudioSelection(-1);return;}
+if(e.key==='ArrowDown'||e.keyCode===40){e.preventDefault();moveAudioSelection(1);return;}
+if(e.key==='Enter'||e.keyCode===13){e.preventDefault();applyAudioSelection();return;}
+if(e.key==='l'||e.key==='L'||e.key==='Blue'||e.key==='ColorF3Blue'||e.key==='F3'||e.keyCode===406||e.key==='Backspace'||e.key==='GoBack'||e.keyCode===461){e.preventDefault();closeAudio();return;}
+e.preventDefault();
+return;
+}
+
+if(e.key==='l'||e.key==='L'||e.key==='Blue'||e.key==='ColorF3Blue'||e.key==='F3'||e.keyCode===406){
+e.preventDefault();
+openAudio();
+return;
+}
+
+// Guide overlay is open — handle guide navigation
+if(guideOpen){
+if(e.key==='g'||e.key==='G'||e.key==='Guide'||e.keyCode===458||e.keyCode===467||e.key==='Green'||e.keyCode===404||e.key==='Backspace'||e.key==='GoBack'||e.keyCode===461){
+e.preventDefault();
+closeGuide();
+return;
+}
+if(e.key==='ArrowUp'||e.keyCode===38){
+e.preventDefault();
+moveGuideHighlight(-1);
+return;
+}
+if(e.key==='ArrowDown'||e.keyCode===40){
+e.preventDefault();
+moveGuideHighlight(1);
+return;
+}
+if(e.key==='Enter'||e.keyCode===13){
+e.preventDefault();
+closeGuide();
+loadChannel(guideIndex);
+return;
+}
+e.preventDefault();
+return;
+}
+
+// Guide toggle
+if(e.key==='g'||e.key==='G'||e.key==='Guide'||e.keyCode===458||e.keyCode===467||e.key==='Green'||e.keyCode===404){
+e.preventDefault();
+openGuide();
+return;
+}
+
+// F, Yellow/F2 — toggle favourites filter (only if favourites are configured)
+if(hasFavorites&&(e.key==='f'||e.key==='F'||e.keyCode===70||e.key==='Yellow'||e.key==='F2'||e.keyCode===459||e.keyCode===405)){
+e.preventDefault();
+toggleFav();
+return;
+}
+
+// Channel Up — instant switch (PageUp=33)
+if(e.key==='PageUp'||e.keyCode===33){
+e.preventDefault();
+loadChannel(navNext(currentIndex));
+return;
+}
+
+// Channel Down — instant switch (PageDown=34)
+if(e.key==='PageDown'||e.keyCode===34){
+e.preventDefault();
+loadChannel(navPrev(currentIndex));
+return;
+}
+
+// Number typing (always against full channel list)
+if(e.key>='0'&&e.key<='9'){
+e.preventDefault();
+sendNumber(e.key);
+return;
+}
+
+// During number typing
+if(numBuffer.length){
+if(e.key==='Backspace'){
+e.preventDefault();
+numBuffer=numBuffer.slice(0,-1);
+if(numBuffer.length){
+numOverlay.textContent=numBuffer;
+clearTimeout(numTimer);
+numTimer=setTimeout(commitNumber,NUM_TIMEOUT);
+}else{
+cancelNumber();
+}
+return;
+}
+if(e.key==='Enter'){
+e.preventDefault();
+commitNumber();
+return;
+}
+cancelNumber();
+}
+
+// ArrowLeft — preview previous
+if(e.key==='ArrowLeft'||e.keyCode===37){
+e.preventDefault();
+if(!overlay.classList.contains('active')){
+showOverlay();
+return;
+}
+var nxt=previewIndex>=0?previewIndex:currentIndex;
+nxt=navPrev(nxt);
+previewChannel(nxt);
+return;
+}
+
+// ArrowRight — preview next
+if(e.key==='ArrowRight'||e.keyCode===39){
+e.preventDefault();
+if(!overlay.classList.contains('active')){
+showOverlay();
+return;
+}
+var nxt=previewIndex>=0?previewIndex:currentIndex;
+nxt=navNext(nxt);
+previewChannel(nxt);
+return;
+}
+
+// ArrowUp/Down — reveal the programme guide first, then browse its rows.
+if(e.key==='ArrowUp'||e.keyCode===38){
+e.preventDefault();
+if(!overlay.classList.contains('active')){
+showOverlay();
+return;
+}
+moveProgrammeSelection(-1);
+showOverlay();
+return;
+}
+
+if(e.key==='ArrowDown'||e.keyCode===40){
+e.preventDefault();
+if(!overlay.classList.contains('active')){
+showOverlay();
+return;
+}
+moveProgrammeSelection(1);
+showOverlay();
+return;
+}
+
+// Enter/OK — confirm preview
+if(e.key==='Enter'){
+e.preventDefault();
+if(previewIndex>=0){
+confirmPreview();
+}else{
+showOverlay();
+}
+return;
+}
+
+// Red button — hold to open config
+if(e.key==='Red'||e.keyCode===403){
+e.preventDefault();
+if(!_redTimer)_redTimer=setTimeout(openConfig,500);
+return;
+}
+
+// Back/Exit
+if(e.key==='Backspace'||e.key==='GoBack'||e.keyCode===461){
+e.preventDefault();
+playerFrame.src='about:blank';
+window.history.back();
+return;
+}
+});
+
+// Red button release — cancel config if released before hold
+document.addEventListener('keyup',function(e){
+if(e.key==='Red'||e.keyCode===403){
+if(_redTimer){clearTimeout(_redTimer);_redTimer=null;}
+}
+});
+
+// popstate fallback for back button (webOS versions that don't fire keydown 461)
+window.addEventListener('popstate',function(){
+if(guideOpen){
+closeGuide();
+// Prevent navigation by re-pushing state
+history.pushState(null,'');
+}
+});
+})();
+</script>
+</body>
+</html>

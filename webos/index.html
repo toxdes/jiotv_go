@@ -5,130 +5,67 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JioTV Go</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body {
-        background: #0d1117;
-        color: #e6edf3;
-        font-family: system-ui, -apple-system, sans-serif;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        -webkit-user-select: none;
-        user-select: none;
-      }
-      .setup-container {
-        text-align: center;
-        max-width: 600px;
-        padding: 2rem;
-      }
-      .setup-title {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #ea4335;
-        margin-bottom: 0.5rem;
-      }
-      .setup-subtitle {
-        font-size: 1.1rem;
-        opacity: 0.6;
-        margin-bottom: 2rem;
-      }
-      .setup-group {
-        margin-bottom: 1.5rem;
-        text-align: left;
-      }
-      .setup-label {
-        display: block;
-        font-size: 1rem;
-        margin-bottom: 0.5rem;
-        opacity: 0.8;
-      }
-      .setup-input {
-        width: 100%;
-        height: 3rem;
-        padding: 0 1rem;
-        border: 2px solid #30363d;
-        border-radius: 0.75rem;
-        background: #161b22;
-        color: #e6edf3;
-        font-size: 1.1rem;
-        outline: none;
-      }
-      .setup-input:focus {
-        border-color: #ea4335;
-      }
-      .setup-hint {
-        font-size: 0.85rem;
-        opacity: 0.4;
-        margin-top: 0.4rem;
-      }
-      .setup-btn {
-        display: inline-block;
-        height: 3rem;
-        padding: 0 2.5rem;
-        border: none;
-        border-radius: 0.75rem;
-        background: #ea4335;
-        color: #fff;
-        font-size: 1.1rem;
-        font-weight: 600;
-        cursor: pointer;
-        outline: none;
-        margin-top: 1rem;
-      }
-      .setup-btn:focus {
-        box-shadow: 0 0 0 3px rgba(234, 67, 53, 0.5);
-      }
-      .setup-error {
-        color: #ea4335;
-        font-size: 0.9rem;
-        margin-top: 0.5rem;
-        display: none;
-      }
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;-webkit-user-select:none;user-select:none}
+      .setup-container{text-align:center;max-width:600px;padding:2rem}
+      .setup-title{font-size:2rem;font-weight:700;color:#ea4335;margin-bottom:.5rem}
+      .setup-subtitle{font-size:1.1rem;opacity:.6;margin-bottom:2rem}
+      .setup-group{margin-bottom:1.5rem;text-align:left}
+      .setup-label{display:block;font-size:1rem;margin-bottom:.5rem;opacity:.8}
+      .setup-input{width:100%;height:3rem;padding:0 1rem;border:2px solid #30363d;border-radius:.75rem;background:#161b22;color:#e6edf3;font-size:1.1rem;outline:none}
+      .setup-input:focus{border-color:#ea4335}
+      .setup-hint{font-size:.85rem;opacity:.4;margin-top:.4rem}
+      .setup-btn{display:inline-block;height:3rem;padding:0 2.5rem;border:none;border-radius:.75rem;background:#ea4335;color:#fff;font-size:1.1rem;font-weight:600;cursor:pointer;outline:none;margin-top:1rem}
+      .setup-btn:focus{box-shadow:0 0 0 3px rgba(234,67,53,.5)}
+      .setup-error{color:#ea4335;font-size:.9rem;margin-top:.5rem;display:none}
+      #tv2-splash{position:fixed;inset:0;z-index:300;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;color:#fff;opacity:0;transition:opacity .15s}
+      #tv2-splash.active{opacity:1}
+      #tv2-splash img{width:300px;height:300px;border-radius:2rem}
+      #tv2-splash span{font-size:1.8rem;font-weight:600;background:rgba(234,67,53,.2);border:2px solid rgba(234,67,53,.6);border-radius:1rem;padding:1.5rem 3rem}
     </style>
+    <script>
+      var STORAGE_KEY="jiotvgo_server_url";
+      function gP(k){var v=localStorage.getItem(k);if(v)return v;try{if(window.webOSSystem)return webOSSystem.getPersistence(k);}catch(e){}return null;}
+      var _savedUrl=gP(STORAGE_KEY);
+    </script>
   </head>
 
   <body>
-    <div class="setup-container">
+    <div id="tv2-splash" class="active"><img src="splash.png" alt=""><span>Loading…</span></div>
+
+    <div class="setup-container" id="setup-page" style="display:none">
       <div class="setup-title">JioTV Go</div>
       <div class="setup-subtitle">TV Setup</div>
-
       <div class="setup-group">
         <label class="setup-label" for="server-url">Server URL</label>
-        <input
-          id="server-url"
-          type="url"
-          class="setup-input"
-          placeholder="http://192.168.1.100:5001"
-          inputmode="url"
-          autocomplete="off"
-        />
-        <div class="setup-hint">
-          Enter the full URL of your JioTV Go server (including port).
-        </div>
+        <input id="server-url" type="url" class="setup-input" placeholder="http://192.168.1.100:5001" inputmode="url" autocomplete="off">
+        <div class="setup-hint">Enter the full URL of your JioTV Go server (including port).</div>
       </div>
-
       <div id="setup-error" class="setup-error"></div>
-
       <button id="setup-connect" class="setup-btn" tabindex="0">Connect</button>
     </div>
 
     <script>
       (function () {
+        // Splash is already visible (class="active" in HTML)
+
+        // If URL is saved, redirect immediately — splash stays during navigation
+        if(_savedUrl){
+          window.location.href=_savedUrl.replace(/\/+$/,"")+"/tv2?_="+Date.now();
+          return;
+        }
+
+        // No saved URL — hide splash, show setup
+        document.getElementById('tv2-splash').classList.remove('active');
+        document.getElementById('setup-page').style.display='';
+
         var input = document.getElementById("server-url");
         var btn = document.getElementById("setup-connect");
         var error = document.getElementById("setup-error");
-        var STORAGE_KEY = "jiotvgo_server_url";
 
-        // If URL already saved, skip setup and go straight to TV
-        var saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          window.location.href = saved.replace(/\/+$/, "") + "/tv?_=" + Date.now();
-          return;
+        function setPersist(key,val){
+          try{localStorage.setItem(key,val);}catch(e){}
+          try{if(window.webOSSystem)webOSSystem.setPersistence(key,val);}catch(e){}
         }
 
         function showError(msg) {
@@ -143,17 +80,12 @@
         function connect() {
           hideError();
           var url = input.value.trim();
-
-          // Normalize: remove trailing slash
           url = url.replace(/\/+$/, "");
-
           if (!url) {
             showError("Please enter a server URL.");
             input.focus();
             return;
           }
-
-          // Basic URL validation
           try {
             var parsed = new URL(url);
             if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -167,57 +99,41 @@
             return;
           }
 
-          // Probe the server to verify it's reachable and a valid JioTV Go instance
-          var tvUrl = url + "/tv";
+          var probeUrl = url + "/tv";
+          var targetUrl = url + "/tv2";
 
-          fetch(tvUrl, { method: "HEAD", mode: "cors" })
+          function doRedirect(){
+            setPersist(STORAGE_KEY, url);
+            document.getElementById('tv2-splash').classList.add('active');
+            document.getElementById('setup-page').style.display='none';
+            window.location.href=targetUrl;
+          }
+
+          fetch(probeUrl, { method: "HEAD", mode: "cors" })
             .then(function (resp) {
-              if (resp.ok || resp.status === 0) {
-                // Success — save and redirect
-                localStorage.setItem(STORAGE_KEY, url);
-                window.location.href = tvUrl;
-              } else {
-                showError(
-                  "Server responded with status " +
-                    resp.status +
-                    ". Make sure JioTV Go is running."
-                );
-              }
+              if (resp.ok || resp.status === 0) { doRedirect(); }
+              else { showError("Server responded with status "+resp.status+". Make sure JioTV Go is running."); }
             })
             .catch(function () {
-              // HEAD might fail due to CORS preflight on some setups — try GET
-              fetch(tvUrl, { mode: "cors" })
+              fetch(probeUrl, { mode: "cors" })
                 .then(function (resp) {
-                  if (resp.ok) {
-                    localStorage.setItem(STORAGE_KEY, url);
-                    window.location.href = tvUrl;
-                  } else {
-                    showError(
-                      "Server unreachable. Check the URL and ensure JioTV Go is running."
-                    );
-                  }
+                  if (resp.ok) { doRedirect(); }
+                  else { showError("Server unreachable. Check the URL and ensure JioTV Go is running."); }
                 })
                 .catch(function () {
-                  showError(
-                    "Cannot reach server. Verify the URL and network connection."
-                  );
+                  showError("Cannot reach server. Verify the URL and network connection.");
                 });
             });
         }
 
         btn.addEventListener("click", connect);
-
         input.addEventListener("keydown", function (e) {
           if (e.key === "Enter") {
             e.preventDefault();
             connect();
           }
         });
-
-        // Auto-focus input
-        setTimeout(function () {
-          input.focus();
-        }, 500);
+        setTimeout(function () { input.focus(); }, 500);
       })();
     </script>
   </body>

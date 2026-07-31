@@ -10,36 +10,28 @@ We have video tutorials for [Windows](https://youtu.be/BnNTYTSvVBc), and [Androi
 
 ## Fork Updates
 
-### Config-Based Favourites
-
-Configure a list of favourite channel IDs in `config.toml` using `favorite_channel_ids`. The order is preserved — channels appear in the exact sequence you specify. Used by the M3U endpoint, the `/fav` alias, and the TV UI.
-
-```yaml
-favorite_channel_ids:
-  - "144"
-  - "279"
-  - "755"
-```
-
-### `/fav` and `fav=true`
-
-- `/fav` — shorthand for `/channels?type=m3u&fav=true`, returns an M3U playlist containing only your config-based favourites in order. Accepts additional query params like `?language=hindi`.
-- `/channels?type=m3u&fav=true` — same, via the channels endpoint.
-
-### Client-Side Favourites (Web UI)
-
-The web interface includes per-channel star buttons. These favourites are stored in your browser's `localStorage` and are independent of the config-based favourites.
-
 ### WebOS / Smart TV App (`/tv`)
 
-A TV-optimized channel grid at `/tv` (and player at `/tv/play/:id`) with:
-- Spatial navigation via remote arrow keys
-- Channel number typing (press digits on remote to jump to a channel)
-- Channel Up/Down remote buttons for surfing
-- Favourites toggle (star button or Yellow remote key) using the same `favorite_channel_ids` from config
-- SPA player overlay — launching and closing channels is instant, no page reloads
+A TV-optimized channel grid at `/tv` with:
+
+- Remote-friendly directional navigation and channel-number entry
+- Channel up/down surfing
+- Favourites mode and configurable favourite-channel order
+- Channels supplied through configured plugins alongside the standard channel list
+- A fast in-page player experience
 
 A WebOS `.ipk` package is included in the `webos/` directory. See `webos/Makefile` for build and install instructions.
+
+### Full-Screen TV Experience (`/tv2`)
+
+`/tv2` is a full-screen, remote-first player designed for TV use:
+
+- Plays standard and configured plugin channels from one channel list
+- Lets you preview nearby channels and their programme information before choosing one to play
+- Shows the current programme, upcoming programmes, current time, and programme progress
+- Lets you browse programme information with the remote; unavailable guides show a clear fallback message
+- Supports favourites mode, channel-number entry, and a full channel guide
+- Provides an audio-language chooser on the Blue remote button or `L` key, with Hindi preferred when available
 
 ---
 
@@ -66,10 +58,8 @@ Get Started with JioTV Go by following the [Get Started](https://jiotv_go.rabil.
   
 - [JioTV Go 📺](#jiotv-go-)
   - [Fork Updates](#fork-updates)
-    - [Config-Based Favourites](#config-based-favourites)
-    - [`/fav` and `fav=true`](#fav-and-favtrue)
-    - [Client-Side Favourites (Web UI)](#client-side-favourites-web-ui)
     - [WebOS / Smart TV App (`/tv`)](#webos--smart-tv-app-tv)
+    - [Full-Screen TV Experience (`/tv2`)](#full-screen-tv-experience-tv2)
   - [Features 🌟](#features-)
   - [Table of Contents](#table-of-contents)
   - [Documentation](#documentation)

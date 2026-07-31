@@ -7,8 +7,9 @@
   var grid = document.getElementById("tv-channel-grid");
   var noResults = document.getElementById("tv-no-results");
   var playerOverlay = document.getElementById("tv-player-overlay");
-  var playerIframe = document.getElementById("tv-player-iframe");
+  var playerVideo = document.getElementById("tv-player-video");
   var chanLabel = document.getElementById("tv-player-chan-label");
+  var hls = null;
 
   if (!grid) return;
 
@@ -36,7 +37,9 @@
   function openChannel(card) {
     var id = card.getAttribute("data-channel-id");
     var name = card.getAttribute("data-channel-name") || id;
-    var url = "/mpd/" + id + "?q=auto";
+    var streamUrl = card.getAttribute("data-stream-url");
+
+    if (!streamUrl) return;
 
     for (var i = 0; i < allCards.length; i++) {
       if (allCards[i] === card) {
@@ -50,20 +53,35 @@
     playerOverlay.classList.add("active");
     document.body.style.overflow = "hidden";
     if (chanLabel) chanLabel.textContent = name;
-    playerIframe.src = url;
+
+    if (hls) { hls.destroy(); hls = null; }
+
+    // Native HLS only works reliably on WebOS IPK; all browsers need hls.js
+    if (typeof window.webOSSystem !== 'undefined') {
+      playerVideo.src = streamUrl;
+      playerVideo.play().catch(function(){});
+    } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+      if (hls) { hls.destroy(); }
+      hls = new Hls({startLevel: -1});
+      hls.loadSource(streamUrl);
+      hls.attachMedia(playerVideo);
+      hls.on(Hls.Events.MANIFEST_PARSED, function() {
+        playerVideo.play().catch(function(){});
+      });
+    } else {
+      playerVideo.src = streamUrl;
+      playerVideo.play().catch(function(){});
+    }
 
     history.pushState({ overlay: true }, "", "/tv/play/" + id + "?name=" + encodeURIComponent(name));
-
-    setTimeout(function () {
-      playerIframe.focus();
-    }, 200);
   }
 
   function closeChannel() {
     playerOpen = false;
     playerOverlay.classList.remove("active");
     document.body.style.overflow = "";
-    playerIframe.src = "";
+    if (hls) { hls.destroy(); hls = null; }
+    playerVideo.src = "";
     if (chanLabel) chanLabel.textContent = "";
 
     history.replaceState(null, "", "/tv");
@@ -76,22 +94,6 @@
       }
     }, 50);
   }
-
-  // Capture-phase Back handler — intercepts before iframe sees it
-  document.addEventListener("keydown", function (e) {
-    if (playerOpen && (e.key === "GoBack" || e.keyCode === 461)) {
-      e.preventDefault();
-      e.stopPropagation();
-      closeChannel();
-    }
-  }, true);
-
-  // Listen for back message from player iframe
-  window.addEventListener("message", function (e) {
-    if (e.data && e.data.type === "back" && playerOpen) {
-      closeChannel();
-    }
-  });
 
   // Browser back button
   window.addEventListener("popstate", function (e) {
