@@ -131,7 +131,7 @@ func TVPlayHandler(c *fiber.Ctx) error {
 	if pluginID, ok := plugins.GetChannelPluginID(id); ok {
 		player_url = "/" + pluginID + "/player/" + id + "?q=" + quality
 	} else if EnableDRM {
-		if utils.ContainsString(id, SONY_LIST) {
+		if utils.ContainsString(id, drmList) {
 			player_url = "/mpd/" + id + "?q=" + quality
 		} else if isCustomChannel(id) {
 			player_url = "/player/" + id + "?q=" + quality

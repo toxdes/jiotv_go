@@ -191,10 +191,10 @@ func TestSafeLogf(t *testing.T) {
 	// Test with nil logger (should not crash)
 	originalLog := Log
 	Log = nil
-	
+
 	// This should not panic
 	SafeLogf("test message %s", "value")
-	
+
 	// Test with valid logger
 	// Note: We can't easily test log output without capturing it,
 	// but we can at least verify it doesn't crash
@@ -206,10 +206,10 @@ func TestSafeLog(t *testing.T) {
 	// Test with nil logger (should not crash)
 	originalLog := Log
 	Log = nil
-	
+
 	// This should not panic
 	SafeLog("test message")
-	
+
 	// Test with valid logger
 	Log = originalLog
 	SafeLog("test message")

@@ -24,7 +24,7 @@ const getCurrentTheme = () => {
 const toggleTheme = () => {
   const htmlTag = document.getElementsByTagName("html")[0];
   const newTheme = getCurrentTheme() === "dark" ? "light" : "dark";
-  
+
   setLocalStorageItem("theme", newTheme);
   htmlTag.setAttribute("data-theme", newTheme);
 };
@@ -35,12 +35,14 @@ const initializeTheme = () => {
 
   if (getCurrentTheme() === "light") {
     const htmlTag = document.getElementsByTagName("html")[0];
-    
+
     if (sunIcon && moonIcon) {
       sunIcon.classList.replace("swap-on", "swap-off");
       moonIcon.classList.replace("swap-off", "swap-on");
     }
     htmlTag.setAttribute("data-theme", "light");
+  } else {
+    htmlTag.setAttribute("data-theme", "dark");
   }
 };
 
@@ -49,6 +51,13 @@ function isCatchupEnabled() {
   const v = getLocalStorageItem("catchupMode", false);
   return !!v;
 }
+// A channel only has catchup if the API says so. Sending an unsupported
+// channel to /catchup/ yields programme links whose streams are refused
+// (HTTP 403 with an empty body), which surfaces in the player as an
+// unexplained format/demuxer error. Cards without the flag stay on /play/.
+function supportsCatchup(card) {
+  return card && card.getAttribute("data-catchup-available") !== "false";
+}
 function applyCatchupToCards() {
   const cards = document.querySelectorAll("a.card[data-channel-id]");
   const params = getCurrentUrlParams();
@@ -56,16 +65,12 @@ function applyCatchupToCards() {
   params.delete("live");
   const qs = params.toString();
   const suffix = qs ? "?" + qs : "";
-  const base = isCatchupEnabled() ? "/catchup/" : "/play/";
+  const catchupEnabled = isCatchupEnabled();
   cards.forEach((card) => {
     const id = card && card.getAttribute("data-channel-id");
-    if (id) {
-      if (card.getAttribute("data-plugin-id")) {
-        card.setAttribute("href", "/" + card.getAttribute("data-plugin-id") + base + encodeURIComponent(id) + suffix);
-      } else {
-        card.setAttribute("href", base + encodeURIComponent(id) + suffix);
-      }
-    }
+    if (!id) return;
+    const base = catchupEnabled && supportsCatchup(card) ? "/catchup/" : "/play/";
+    card.setAttribute("href", base + encodeURIComponent(id) + suffix);
   });
 }
 function styleCatchupCards() {
@@ -73,7 +78,7 @@ function styleCatchupCards() {
   const enabled = isCatchupEnabled();
   cards.forEach((card) => {
     if (!card) return;
-    if (enabled) {
+    if (enabled && supportsCatchup(card)) {
       card.classList.remove("border-primary");
       card.classList.add("border-warning");
     } else {
@@ -81,6 +86,29 @@ function styleCatchupCards() {
       card.classList.add("border-primary");
     }
   });
+}
+
+function applyPluginCardHrefs() {
+  document.querySelectorAll("a.card[data-channel-id]").forEach((card) => {
+    const pluginID = card.getAttribute("data-plugin-id");
+    if (!pluginID) return;
+    const id = card.getAttribute("data-channel-id");
+    const base = isCatchupEnabled() && supportsCatchup(card) ? "/catchup/" : "/play/";
+    const params = getCurrentUrlParams();
+    params.delete("live");
+    const qs = params.toString();
+    card.setAttribute("href", "/" + pluginID + base + encodeURIComponent(id) + (qs ? "?" + qs : ""));
+  });
+}
+// Only the top-level channel routes /play/<id> and /catchup/<id> switch modes.
+// Nested routes such as /catchup/play/<id> or /catchup/render/<id> carry a
+// sub-route where the id would be, and must be left alone.
+function parseChannelRoute(pathname) {
+  const match = pathname.match(/^\/(play|catchup)\/([^/?#]+)\/?$/);
+  if (!match || match[2] === "play" || match[2] === "render" || match[2] === "stream") {
+    return null;
+  }
+  return { mode: match[1], id: match[2] };
 }
 function updateCatchupUI() {
   const btn = document.getElementById("catchup-toggle");
@@ -101,19 +129,19 @@ function updateCatchupUI() {
     label.textContent = enabled ? "Catchup: ON" : "Catchup: OFF";
   }
   applyCatchupToCards();
+  applyPluginCardHrefs();
   styleCatchupCards();
-  const path = window.location.pathname;
-  const match = path.match(/^\/(play|catchup)\/([^/?#]+)/);
-  if (match) {
-    const id = match[2];
+
+  const route = parseChannelRoute(window.location.pathname);
+  if (route) {
     const params = getCurrentUrlParams();
     const liveOverride = params.get("live") === "true";
     const qs = params.toString();
     const base = enabled ? "/catchup/" : "/play/";
-    const target = base + id + (qs ? "?" + qs : "");
+    const target = base + route.id + (qs ? "?" + qs : "");
     if (
-      (enabled && match[1] !== "catchup" && !liveOverride) ||
-      (!enabled && match[1] !== "play")
+      (enabled && route.mode !== "catchup" && !liveOverride) ||
+      (!enabled && route.mode !== "play")
     ) {
       window.location.replace(target);
     }
@@ -127,19 +155,14 @@ function toggleCatchupMode() {
   }
   setLocalStorageItem("catchupMode", next);
   updateCatchupUI();
-  const path = window.location.pathname;
-  const match = path.match(/^\/(play|catchup)\/([^/?#]+)/);
-  if (match) {
-    const id = match[2];
+  const route = parseChannelRoute(window.location.pathname);
+  if (route) {
     const params = getCurrentUrlParams();
-    // When manually toggling, we probably want to ignore the live override if we are switching TO catchup
-    // But if we are switching TO play, live override is redundant but harmless.
-    // If we are on Play (with live=true) and toggle ON, we should go to Catchup.
-    // So we don't check liveOverride here because user action takes precedence.
+    // Manual toggling is an explicit user action, so it overrides live=true.
     const qs = params.toString();
     const base = next ? "/catchup/" : "/play/";
-    const target = base + id + (qs ? "?" + qs : "");
-    if ((next && match[1] !== "catchup") || (!next && match[1] !== "play")) {
+    const target = base + route.id + (qs ? "?" + qs : "");
+    if ((next && route.mode !== "catchup") || (!next && route.mode !== "play")) {
       window.location.replace(target);
     }
   }

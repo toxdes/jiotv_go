@@ -482,7 +482,7 @@ func TestCustomChannelPrefix(t *testing.T) {
 			{
 				ID:       "cc_already_prefixed",
 				Name:     "Already Prefixed Channel",
-				URL:      "https://example.com/already_prefixed.m3u8", 
+				URL:      "https://example.com/already_prefixed.m3u8",
 				LogoURL:  "https://example.com/already_logo.png",
 				Category: 5,
 				Language: 1,

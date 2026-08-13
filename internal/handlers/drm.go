@@ -57,7 +57,38 @@ var (
 	// nextCredentialValidationTime tracks when token validity should be checked next.
 	// This prevents rechecking/re-refreshing on every request.
 	nextCredentialValidationTime time.Time
+
+	// drmMpdCache caches the DrmMpdOutput for a short duration to prevent double API calls
+	// when IPTV apps request both the MPD and Key sequentially.
+	drmMpdCache    sync.Map
+	drmMpdCacheTTL = 30 * time.Second
 )
+
+type drmMpdCacheEntry struct {
+	Output    *DrmMpdOutput
+	UpdatedAt time.Time
+}
+
+func getCachedDrmMpd(key string) *DrmMpdOutput {
+	entryRaw, ok := drmMpdCache.Load(key)
+	if !ok {
+		return nil
+	}
+	entry, ok := entryRaw.(drmMpdCacheEntry)
+	if !ok {
+		drmMpdCache.Delete(key)
+		return nil
+	}
+	if time.Since(entry.UpdatedAt) > drmMpdCacheTTL {
+		drmMpdCache.Delete(key)
+		return nil
+	}
+	return entry.Output
+}
+
+func setCachedDrmMpd(key string, output *DrmMpdOutput) {
+	drmMpdCache.Store(key, drmMpdCacheEntry{Output: output, UpdatedAt: time.Now()})
+}
 
 // EnsureFreshCredentials refreshes tokens proactively before they expire
 // This function prevents 403 errors by keeping credentials always fresh
@@ -237,6 +268,11 @@ func calculateNextCredentialValidationTime(credentials *utils.JIOTV_CREDENTIALS,
 
 // getDrmMpd returns required properties for rendering DRM MPD
 func getDrmMpd(channelID, quality string) (*DrmMpdOutput, error) {
+	cacheKey := channelID + "_" + quality
+	if cached := getCachedDrmMpd(cacheKey); cached != nil {
+		return cached, nil
+	}
+
 	// Get live stream URL from JioTV API
 	liveResult, err := TV.Live(channelID)
 	if err != nil {
@@ -245,19 +281,31 @@ func getDrmMpd(channelID, quality string) (*DrmMpdOutput, error) {
 	if refreshedResult, refreshErr := refreshLiveResultIfNeeded(channelID, liveResult); refreshErr == nil && refreshedResult != nil {
 		liveResult = refreshedResult
 	}
+	return buildDrmMpdOutput(liveResult, channelID, quality)
+}
 
-	tv_url := internalUtils.SelectQuality(quality, liveResult.Mpd.Bitrates.Auto, liveResult.Mpd.Bitrates.High, liveResult.Mpd.Bitrates.Medium, liveResult.Mpd.Bitrates.Low)
+// buildDrmMpdOutput turns a playback response into the properties needed to
+// render the DRM player. It is shared by live channels and premium provider
+// content, which return the same payload shape.
+func buildDrmMpdOutput(liveResult *television.LiveURLOutput, channelID, quality string) (*DrmMpdOutput, error) {
+	cacheKey := channelID + "_" + quality
+
+	// ResolvedBitrates covers both shapes: live channels nest URLs under
+	// mpd.bitrates, premium content returns a single mpd.auto.
+	bitrates := liveResult.Mpd.ResolvedBitrates()
+
+	tv_url := internalUtils.SelectQuality(quality, bitrates.Auto, bitrates.High, bitrates.Medium, bitrates.Low)
 
 	// If quality selection fails (empty), try to fallback to any available quality
 	if tv_url == "" {
-		if liveResult.Mpd.Bitrates.High != "" {
-			tv_url = liveResult.Mpd.Bitrates.High
-		} else if liveResult.Mpd.Bitrates.Auto != "" {
-			tv_url = liveResult.Mpd.Bitrates.Auto
-		} else if liveResult.Mpd.Bitrates.Medium != "" {
-			tv_url = liveResult.Mpd.Bitrates.Medium
-		} else if liveResult.Mpd.Bitrates.Low != "" {
-			tv_url = liveResult.Mpd.Bitrates.Low
+		if bitrates.High != "" {
+			tv_url = bitrates.High
+		} else if bitrates.Auto != "" {
+			tv_url = bitrates.Auto
+		} else if bitrates.Medium != "" {
+			tv_url = bitrates.Medium
+		} else if bitrates.Low != "" {
+			tv_url = bitrates.Low
 		}
 	}
 
@@ -265,13 +313,15 @@ func getDrmMpd(channelID, quality string) (*DrmMpdOutput, error) {
 		tv_url = liveResult.Mpd.Result
 	}
 	if tv_url == "" {
-		return &DrmMpdOutput{
+		output := &DrmMpdOutput{
 			IsDRM:       liveResult.IsDRM,
 			PlayUrl:     "",
 			LicenseUrl:  "",
 			Tv_url_host: "",
 			Tv_url_path: "",
-		}, nil
+		}
+		setCachedDrmMpd(cacheKey, output)
+		return output, nil
 	}
 
 	channel_enc_url, err := secureurl.EncryptURL(tv_url)
@@ -280,25 +330,29 @@ func getDrmMpd(channelID, quality string) (*DrmMpdOutput, error) {
 		return nil, err
 	}
 
+	// ResolvedLicenseURL covers both sources: live channels carry the license in
+	// mpd.key, premium provider content returns a top-level keyUrl.
 	licenseUrl := ""
-	if liveResult.Mpd.Key != "" {
-		enc_key, err := secureurl.EncryptURL(liveResult.Mpd.Key)
-		if err != nil {
-			utils.Log.Panicln(err)
-			return nil, err
+	if resolvedLicenseURL := liveResult.ResolvedLicenseURL(); resolvedLicenseURL != "" {
+		enc_key, encErr := secureurl.EncryptURL(resolvedLicenseURL)
+		if encErr != nil {
+			utils.Log.Panicln(encErr)
+			return nil, encErr
 		}
 		licenseUrl = "/drm?auth=" + enc_key + "&channel_id=" + channelID + "&channel=" + channel_enc_url
 	}
 
 	// Quick fix for timesplay channels.
 	if liveResult.AlgoName == "timesplay" {
-		return &DrmMpdOutput{
+		output := &DrmMpdOutput{
 			IsDRM:       liveResult.IsDRM,
 			PlayUrl:     tv_url,
 			LicenseUrl:  licenseUrl,
 			Tv_url_host: "",
 			Tv_url_path: "",
-		}, nil
+		}
+		setCachedDrmMpd(cacheKey, output)
+		return output, nil
 	}
 
 	parsedTvUrl, err := url.Parse(tv_url)
@@ -319,13 +373,15 @@ func getDrmMpd(channelID, quality string) (*DrmMpdOutput, error) {
 		return nil, err
 	}
 
-	return &DrmMpdOutput{
+	output := &DrmMpdOutput{
 		IsDRM:       liveResult.IsDRM,
 		PlayUrl:     "/render.mpd?auth=" + channel_enc_url + "&channel_id=" + channelID + "&q=" + quality,
 		LicenseUrl:  licenseUrl,
 		Tv_url_host: tv_url_host,
 		Tv_url_path: tv_url_path,
-	}, nil
+	}
+	setCachedDrmMpd(cacheKey, output)
+	return output, nil
 }
 
 // LiveMpdHandler handles live stream routes /mpd/:channelID
@@ -803,4 +859,58 @@ func DashHandler(c *fiber.Ctx) error {
 	c.Response().Header.Del(fiber.HeaderServer)
 
 	return nil
+}
+
+// LiveManifestMpdHandler handles the IPTV M3U route for MPD manifests: /live/mpd/:channelID
+func LiveManifestMpdHandler(c *fiber.Ctx) error {
+	channelID := c.Params("channelID")
+	quality := c.Query("q")
+	if quality == "" {
+		quality = "auto"
+	}
+
+	EnsureFreshCredentials()
+
+	drmMpdOutput, err := getDrmMpd(channelID, quality)
+	if err != nil {
+		utils.Log.Printf("Error getting DRM MPD: %v", err)
+		return internalUtils.InternalServerError(c, err.Error())
+	}
+
+	if drmMpdOutput.PlayUrl == "" {
+		return internalUtils.NotFoundError(c, "No MPD URL found for channel "+channelID)
+	}
+
+	return c.Redirect(drmMpdOutput.PlayUrl, fiber.StatusFound)
+}
+
+// LiveManifestKeyHandler acts as a proxy for the Widevine license request for IPTV clients: /live/key/:channelID
+func LiveManifestKeyHandler(c *fiber.Ctx) error {
+	channelID := c.Params("channelID")
+	quality := c.Query("q")
+	if quality == "" {
+		quality = "auto"
+	}
+
+	// The MPD handler was likely called just milliseconds ago,
+	// so getDrmMpd will instantly return the cached result.
+	drmMpdOutput, err := getDrmMpd(channelID, quality)
+	if err != nil {
+		utils.Log.Printf("Error getting DRM Key info: %v", err)
+		return internalUtils.InternalServerError(c, err.Error())
+	}
+
+	if drmMpdOutput.LicenseUrl == "" {
+		return internalUtils.NotFoundError(c, "No License URL found for channel "+channelID)
+	}
+
+	parsedUrl, err := url.Parse(drmMpdOutput.LicenseUrl)
+	if err != nil {
+		return internalUtils.InternalServerError(c, err.Error())
+	}
+
+	// Inject query parameters into the context so DRMKeyHandler can read them
+	c.Request().URI().SetQueryString(parsedUrl.RawQuery)
+
+	return DRMKeyHandler(c)
 }

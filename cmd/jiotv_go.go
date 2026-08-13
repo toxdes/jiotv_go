@@ -106,12 +106,14 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	handlers.Init()
 
 	app.Get("/", handlers.IndexHandler)
-	app.Get("/tv", handlers.TVIndexHandler)            // JTV: TV-optimized channel grid
-	app.Get("/tv/play/:id", handlers.TVPlayHandler)    // JTV: TV-optimized player page
-	app.Get("/tv2", handlers.TV2Handler)               // TV2: Tata Sky-style fullscreen player
+	app.Get("/tv", handlers.TVIndexHandler)         // JTV: TV-optimized channel grid
+	app.Get("/tv/play/:id", handlers.TVPlayHandler) // JTV: TV-optimized player page
+	app.Get("/tv2", handlers.TV2Handler)            // TV2: Tata Sky-style fullscreen player
 	app.Post("/login/sendOTP", handlers.LoginSendOTPHandler)
 	app.Post("/login/verifyOTP", handlers.LoginVerifyOTPHandler)
 	app.Get("/logout", handlers.LogoutHandler)
+	app.Get("/live/mpd/:channelID", handlers.LiveManifestMpdHandler)
+	app.Post("/live/key/:channelID", handlers.LiveManifestKeyHandler)
 	app.Get("/live/:id", handlers.LiveHandler)
 	app.Get("/live/:quality/:id", handlers.LiveQualityHandler)
 	app.Get("/render.m3u8", handlers.RenderHandler)
@@ -122,6 +124,11 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	app.Get("/playlist.m3u", handlers.PlaylistHandler)
 	app.Get("/play/:id", handlers.PlayHandler)
 	app.Get("/player/:id", handlers.PlayerHandler)
+	app.Get("/premium/providers", handlers.PremiumProvidersHandler)
+	app.Get("/premium/providers/:id/catalog", handlers.PremiumProviderCatalogHandler)
+	app.Get("/premium/providers/:id/watch", handlers.PremiumProviderWatchHandler)
+	app.Get("/premium/providers/:id/play", handlers.PremiumProviderPlayHandler)
+	app.Get("/premium/player", handlers.PremiumPlayerHandler)
 	app.Get("/catchup/:id", handlers.CatchupHandler)
 	app.Get("/catchup/play/:id", handlers.CatchupPlayerHandler)
 	app.Get("/catchup/render/:id", handlers.CatchupRenderPlayerHandler)

@@ -1,11 +1,11 @@
 package plugins
 
 import (
+	"github.com/gofiber/fiber/v2"
 	"github.com/jiotv-go/jiotv_go/v3/internal/config"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/plugins/external"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/television"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/utils"
-	"github.com/gofiber/fiber/v2"
 )
 
 var activePlugins []*external.Plugin

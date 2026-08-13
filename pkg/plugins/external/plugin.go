@@ -33,8 +33,8 @@ type RuntimeConfig struct {
 		Slug     string `json:"slug"`
 	} `json:"channels"`
 	API struct {
-		PlaybackURL       string `json:"playback_url"`
-		AuthURL           string `json:"auth_url"`
+		PlaybackURL        string `json:"playback_url"`
+		AuthURL            string `json:"auth_url"`
 		PlatformTokenRegex string `json:"platform_token_regex"`
 	} `json:"api"`
 	Headers map[string]string `json:"headers"`

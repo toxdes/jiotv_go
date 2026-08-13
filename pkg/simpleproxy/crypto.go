@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	cryptoKey  []byte
+	cryptoKey   []byte
 	cryptoKeyMu sync.RWMutex
 )
 

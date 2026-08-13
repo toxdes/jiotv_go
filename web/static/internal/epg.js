@@ -83,7 +83,8 @@ function getSimilarChannels(channelsData, currentChannel, maxChannels = 12) {
     // Filter channels by same category and language, excluding current channel
     let similarChannels = channelsData.result.filter(channel => {
         return channel.channel_id !== currentChannelID &&
-            (channel.channelCategoryId === currentCategory && channel.channelLanguageId === currentLanguage);
+            channel.channelCategoryId === currentCategory &&
+            channel.channelLanguageId === currentLanguage;
     });
 
     // Shuffle the array to randomize selection
@@ -119,19 +120,21 @@ function renderSimilarChannels(similarChannels) {
 
         const channelCard = createElement('a', {
             href: `/play/${channel.channel_id}`,
-            className: 'card relative border border-primary shadow-lg hover:shadow-xl hover:bg-base-300 transition-all duration-200 ease-in-out scale-100 hover:scale-105 group',
+            className: 'card relative border border-primary bg-base-100 shadow-sm group',
             'data-channel-id': channel.channel_id,
+            'data-channel-name': channel.channel_name,
+            ...(channel.requiresSubscription ? { 'data-requires-subscription': 'true' } : {}),
             tabindex: '0'
         }, '', `
-            <div class="flex flex-col items-center p-2">
+            <div class="flex flex-col items-center p-3">
                 <img
                     src="${logoURL}"
                     loading="lazy"
                     alt="${channel.channel_name}"
-                    class="h-12 w-12 rounded-full bg-gray-200"
+                    class="h-12 w-12 rounded-xl logo-tile ring-1 ring-base-300/60"
                     onerror="this.style.display='none'"
                 />
-                <span class="text-sm font-bold mt-1 text-center line-clamp-2">${channel.channel_name}</span>
+                <span class="text-sm font-semibold mt-2 text-center leading-snug line-clamp-2">${channel.channel_name}</span>
             </div>
         `);
 
@@ -166,7 +169,10 @@ function updateEPG(epgData) {
     if (shows.length === 0) return;
     
     if (shownameElement) shownameElement.textContent = shows[0].showname;
-    if (descriptionElement) descriptionElement.textContent = shows[0].description;
+    if (descriptionElement) {
+        descriptionElement.textContent = shows[0].description;
+        updateNowPlayingDescription();
+    }
     
     if (episodePosterElement) {
         const posterUrl = new URL("/jtvposter/", window.location.href);

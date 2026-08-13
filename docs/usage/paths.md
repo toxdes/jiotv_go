@@ -47,7 +47,7 @@ This section provides information about the API endpoints that JioTV Go offers. 
 ### Get Channels data
 
 - **Path**: `/channels`
-  Discover the complete list of available channels in JSON format.
+  Discover the complete list of available channels in JSON format. DRM channels include `channel_url` for the MPD manifest and `key_url` for the `/live/key/:channel_id` license path.
 
 ## TV Endpoints
 
@@ -85,5 +85,17 @@ M3U8 stream file for the specified `channel_id`.
 - **Path**: `/live/:quality/:channel_id`
 
 M3U8 stream file for the specified `channel_id` with the specified `quality`. The `quality` can be `low`, `medium`, `high`, or `l`, `m`, `h`.
+
+### DRM MPD Manifest
+
+- **Path**: `/live/mpd/:channel_id`
+
+MPD manifest for DRM protected channels. You can also append `?q=<level>` to request a specific quality level.
+
+### DRM License Key
+
+- **Path**: `/live/key/:channel_id`
+
+License key endpoint to authorize playback for Widevine DRM protected streams. This is used internally by supported players (like Kodi) to decrypt the MPD streams.
 
 Explore these paths and endpoints to access the features and content offered by JioTV Go. They provide the foundation for interacting with the application and enjoying the available channels and streams.

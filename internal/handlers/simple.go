@@ -80,8 +80,8 @@ func SimpleLiveHandler(c *fiber.Ctx) error {
 	serverHost := c.Protocol() + "://" + c.Hostname()
 
 	rewritten, err := simpleproxy.RewritePlaylist(string(m3u8Content), baseURL, simpleproxy.RewriteConfig{
-		ChannelID: id,
-		CookieHex: cookieHex,
+		ChannelID:  id,
+		CookieHex:  cookieHex,
 		ServerHost: serverHost,
 	})
 	if err != nil {

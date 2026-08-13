@@ -136,6 +136,23 @@ function updateFavoriteButtonStates() {
   });
 }
 
+function injectChannelIDs() {
+  document.querySelectorAll("a.card[data-channel-id]").forEach((card) => {
+    if (card.querySelector(".channel-id-label")) return;
+    const id = card.getAttribute("data-channel-id");
+    if (!id) return;
+    const label = document.createElement("span");
+    label.className = "channel-id-label text-xs opacity-50";
+    label.textContent = "ID:" + id;
+    const favoriteBtn = card.querySelector(".favorite-btn");
+    if (favoriteBtn) {
+      favoriteBtn.insertAdjacentElement("beforebegin", label);
+    } else {
+      card.appendChild(label);
+    }
+  });
+}
+
 describe('Favorite Channels Functionality', () => {
   beforeEach(() => {
     localStorageMock.clear();
@@ -346,6 +363,58 @@ describe('Favorite Channels Functionality', () => {
       expect(originalGrid.contains(card2)).toBe(true);
       expect(favContainer.contains(card2)).toBe(false);
       expect(favSection.style.display).toBe('none'); // Assuming it's the only favorite
+    });
+  });
+describe('injectChannelIDs', () => {
+    beforeEach(() => {
+      const card1 = document.createElement('a');
+      card1.className = 'card';
+      card1.dataset.channelId = 'c1';
+      card1.innerHTML = '<button class="favorite-btn"></button>';
+      document.getElementById('original-channels-grid').appendChild(card1);
+
+      const card2 = document.createElement('a');
+      card2.className = 'card';
+      card2.dataset.channelId = 'c2';
+      document.getElementById('original-channels-grid').appendChild(card2);
+    });
+
+    it('should add an "ID:" label to each card with a data-channel-id', () => {
+      injectChannelIDs();
+      const labels = document.querySelectorAll('.channel-id-label');
+      expect(labels.length).toBe(2);
+      expect(labels[0].textContent).toBe('ID:c1');
+      expect(labels[1].textContent).toBe('ID:c2');
+    });
+
+    it('should place the label immediately before the favorite button when one exists', () => {
+      injectChannelIDs();
+      const btn = document.querySelector('.favorite-btn');
+      const label = btn.previousElementSibling;
+      expect(label.classList.contains('channel-id-label')).toBe(true);
+      expect(label.textContent).toBe('ID:c1');
+    });
+
+    it('should append the label to the card when there is no favorite button', () => {
+      injectChannelIDs();
+      const card2 = document.querySelectorAll('a.card')[1];
+      expect(card2.lastElementChild.classList.contains('channel-id-label')).toBe(true);
+      expect(card2.lastElementChild.textContent).toBe('ID:c2');
+    });
+
+    it('should not duplicate labels when called again', () => {
+      injectChannelIDs();
+      injectChannelIDs();
+      expect(document.querySelectorAll('.channel-id-label').length).toBe(2);
+    });
+
+    it('should skip cards without a data-channel-id attribute', () => {
+      const plainCard = document.createElement('a');
+      plainCard.className = 'card';
+      document.getElementById('original-channels-grid').appendChild(plainCard);
+      injectChannelIDs();
+      expect(document.querySelectorAll('.channel-id-label').length).toBe(2);
+      expect(plainCard.querySelector('.channel-id-label')).toBeNull();
     });
   });
 });

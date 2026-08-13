@@ -51,7 +51,7 @@ func MakeHTTPRequest(config HTTPRequestConfig, client *fasthttp.Client) (*fastht
 	}
 
 	resp := fasthttp.AcquireResponse()
-	
+
 	// Perform the HTTP request
 	if err := client.Do(req, resp); err != nil {
 		fasthttp.ReleaseResponse(resp)
