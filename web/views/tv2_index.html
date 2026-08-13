@@ -29,6 +29,8 @@ body{background:#000;overflow:hidden;-webkit-user-select:none;user-select:none}
 #tv2-num-overlay{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(234,67,53,.92);color:#fff;font-size:5rem;font-weight:800;padding:1rem 2.5rem;border-radius:1.5rem;z-index:200;pointer-events:none;opacity:0;transition:opacity .1s;text-shadow:0 2px 4px rgba(0,0,0,.5)}
 #tv2-num-overlay.active{opacity:1}
 #tv2-num-overlay.invalid{opacity:.4}
+#tv2-audio-hint{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);z-index:110;background:rgba(0,0,0,.88);border:1px solid rgba(255,255,255,.25);border-radius:.75rem;color:#fff;padding:.8rem 1.5rem;font-size:1.4rem;opacity:0;pointer-events:none;transition:opacity .1s}
+#tv2-audio-hint.active{opacity:1}
 #tv2-splash{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;color:#fff}
 #tv2-splash-icon{width:300px;height:300px;border-radius:2rem}
 #tv2-splash span{font-size:1.8rem;font-weight:600;background:rgba(234,67,53,.2);border:2px solid rgba(234,67,53,.6);border-radius:1rem;padding:1.5rem 3rem}
@@ -111,6 +113,7 @@ body{background:#000;overflow:hidden;-webkit-user-select:none;user-select:none}
 </div>
 
 <div id="tv2-num-overlay"></div>
+<div id="tv2-audio-hint">Press OK to turn sound on</div>
 
 <div id="tv2-guide">
 <div id="tv2-guide-header">CHANNEL GUIDE</div>
@@ -171,6 +174,7 @@ var loadingOverlay=document.getElementById('tv2-loading');
 var splashText=document.getElementById('tv2-splash-text');
 var audioPopup=document.getElementById('tv2-audio-popup');
 var audioList=document.getElementById('tv2-audio-list');
+var audioHint=document.getElementById('tv2-audio-hint');
 
 // Server-configured favorite channel IDs (from config.toml)
 var favIds=window.TV2_FAV_IDS||[];
@@ -220,9 +224,11 @@ var PROGRAMME_CACHE_TTL=5*60*1000;
 var audioOpen=false;
 var audioTracks=[];
 var audioSelectedIndex=0;
+var audioUnlockRequested=false;
 
 playerFrame.addEventListener('load',function(){
 loadingOverlay.classList.remove('active');
+if(audioUnlockRequested)sendPlayerCommand('unmute');
 });
 
 // Plugin HLS players report readiness through player_tv.js and wait for their
@@ -235,13 +241,43 @@ playerFrame.contentWindow.postMessage(message,window.location.origin);
 }
 }
 
+function setAudioHint(muted){
+if(!audioHint)return;
+audioHint.classList.toggle('active',muted===true);
+}
+
+function requestPlayerUnmute(){
+audioUnlockRequested=true;
+
+// Try synchronously from the parent while the remote key event is active.
+// The iframe is same-origin, so this can preserve user activation on browsers
+// that do not transfer it through postMessage.
+try{
+var frameDocument=playerFrame.contentDocument;
+var video=frameDocument&&frameDocument.querySelector('video');
+if(video){
+if(!video.muted)return;
+video.volume=1;
+video.muted=false;
+}
+}catch(e){}
+
+// Also notify the iframe player for video elements created after this event.
+sendPlayerCommand('unmute');
+}
+
 window.addEventListener('message',function(e){
 if(e.source!==playerFrame.contentWindow||!e.data||typeof e.data.type!=='string')return;
 if(e.data.type==='ready'){
 sendPlayerCommand('play');
+if(audioUnlockRequested)sendPlayerCommand('unmute');
 }
 if(e.data.type==='playing'){
 loadingOverlay.classList.remove('active');
+setAudioHint(e.data.muted);
+}
+if(e.data.type==='audioState'){
+setAudioHint(e.data.muted);
 }
 if(e.data.type==='audioTracks'){
 audioTracks=Array.isArray(e.data.tracks)?e.data.tracks:[];
@@ -530,6 +566,7 @@ var row=e.target.closest('[data-channel-index]');
 if(row){
 var idx=parseInt(row.dataset.channelIndex,10);
 closeGuide();
+requestPlayerUnmute();
 loadChannel(idx);
 }
 });
@@ -767,11 +804,16 @@ var openAudioAfterStart=e.key==='l'||e.key==='L'||e.key==='Blue'||e.key==='Color
 e.preventDefault();
 hasStarted=true;
 splash.classList.add('hidden');
+requestPlayerUnmute();
 loadChannel(favMode&&favIndices.length?favIndices[0]:0);
 setFavMode(favMode);
 if(openAudioAfterStart)setTimeout(openAudio,0);
 return;
 }
+
+// Use app-visible remote input as the audio-unlock gesture. Volume keys are
+// handled by webOS system UI and are not reliably delivered to web apps.
+requestPlayerUnmute();
 
 // Config overlay is open — only allow Back/Exit to close
 if(setupOverlay.classList.contains('active')){

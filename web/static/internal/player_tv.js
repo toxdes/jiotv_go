@@ -42,6 +42,14 @@
     if (video && video.paused) video.play().catch(function () {});
   }
 
+  function unmuteVideo() {
+    if (!video) findVideo();
+    if (!video || !video.muted) return;
+
+    video.volume = 1.0;
+    video.muted = false;
+  }
+
   function doPause() {
     if (!video) findVideo();
     if (video && !video.paused) video.pause();
@@ -70,6 +78,9 @@
         break;
       case "play":
         doPlay();
+        break;
+      case "unmute":
+        unmuteVideo();
         break;
       case "pause":
         doPause();
@@ -108,10 +119,13 @@
     if (video) {
       video.volume = 1.0;
       video.addEventListener("play", function () {
-        postToParent({ type: "playing" });
+        postToParent({ type: "playing", muted: video.muted });
       });
       video.addEventListener("pause", function () {
         postToParent({ type: "paused" });
+      });
+      video.addEventListener("volumechange", function () {
+        postToParent({ type: "audioState", muted: video.muted });
       });
       setTimeout(function () {
         if (video.paused) {
@@ -119,6 +133,7 @@
         }
       }, 3000);
     }
+    if (video) postToParent({ type: "audioState", muted: video.muted });
     postToParent({ type: "ready" });
   }
 
