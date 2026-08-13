@@ -68,34 +68,45 @@ func TV2Handler(c *fiber.Ctx) error {
 
 	chs := make([]tv2Channel, len(displayChannels))
 	for i, ch := range displayChannels {
-		var playerURL string
 		var epgChannelID string
 		// Match /tv/play's routing: resolve plugin ownership through the plugin
 		// manager instead of relying on the channel's embedded metadata.
-		if pluginID, ok := plugins.GetChannelPluginID(ch.ID); ok {
+		pluginID, isPlugin := plugins.GetChannelPluginID(ch.ID)
+		if isPlugin {
 			// af=1 enables the HLS player's DRM-equivalent autoplay policy:
 			// attempt unmuted playback, then retry muted if the browser requires it.
-			playerURL = "/" + pluginID + "/player/" + ch.ID + "?q=high&af=1"
 			if !isTV2NumericChannelID(ch.ID) {
 				epgChannelID = findTV2JioEPGChannelID(ch.Name, jioChannels)
 			}
-		} else {
-			// /mpd handles DRM with Shaka and falls back to the HLS player when
-			// the channel has no usable DRM MPD.
-			// af=1 asks the HLS fallback to follow the DRM player's autoplay
-			// policy: try unmuted first, then retry muted if required.
-			playerURL = "/mpd/" + ch.ID + "?q=high&af=1"
 		}
 
 		chs[i] = tv2Channel{
 			ID:           ch.ID,
 			Name:         ch.Name,
-			PlayerURL:    playerURL,
+			PlayerURL:    tv2PlayerURL(ch.ID, pluginID, isPlugin),
 			EPGChannelID: epgChannelID,
 		}
 	}
 	putTV2CachedChannels(chs)
 	return renderTV2(c, chs)
+}
+
+// tv2PlayerURL keeps TV2 on the same playback contract as the upstream web
+// player. Plugin channels always use their plugin player. Standard channels
+// use the DRM-aware player only when DRM is enabled; otherwise they use the
+// regular HLS player directly.
+func tv2PlayerURL(channelID, pluginID string, isPlugin bool) string {
+	if isPlugin {
+		return "/" + pluginID + "/player/" + channelID + "?q=high&af=1"
+	}
+
+	if EnableDRM {
+		// /mpd handles DRM with Shaka and falls back to HLS when the channel
+		// has no usable DRM MPD. af=1 preserves TV2's autoplay recovery.
+		return "/mpd/" + channelID + "?q=high&af=1"
+	}
+
+	return "/player/" + channelID + "?q=high&af=1"
 }
 
 func isTV2NumericChannelID(channelID string) bool {
