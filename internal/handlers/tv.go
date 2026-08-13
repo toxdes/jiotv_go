@@ -39,15 +39,13 @@ func TVIndexHandler(c *fiber.Ctx) error {
 
 	displayChannels := channels.Result
 	if language != "" || category != "" {
-		lang, err := strconv.Atoi(language)
-		if err != nil {
-			return ErrorMessageHandler(c, err)
-		}
-		cat, err := strconv.Atoi(category)
-		if err != nil {
-			return ErrorMessageHandler(c, err)
-		}
-		displayChannels = television.FilterChannels(displayChannels, lang, cat)
+		// Keep /tv in sync with the main index route: each filter may contain
+		// a comma-separated list and an omitted filter must remain unspecified.
+		displayChannels = television.FilterChannelsByDefaults(
+			displayChannels,
+			parseTVFilter(category),
+			parseTVFilter(language),
+		)
 	} else if len(config.Cfg.DefaultCategories) > 0 || len(config.Cfg.DefaultLanguages) > 0 {
 		displayChannels = television.FilterChannelsByDefaults(displayChannels, config.Cfg.DefaultCategories, config.Cfg.DefaultLanguages)
 	}
@@ -57,6 +55,7 @@ func TVIndexHandler(c *fiber.Ctx) error {
 		television.Channel
 		PlayerURL string `json:"player_url"`
 		StreamURL string `json:"stream_url"`
+		UsePlayer bool   `json:"use_player"`
 	}
 	tvChannels := make([]tvChannel, len(displayChannels))
 	for i, ch := range displayChannels {
@@ -66,19 +65,12 @@ func TVIndexHandler(c *fiber.Ctx) error {
 		} else {
 			logoURL = hostURL + "/jtvimage/" + ch.LogoURL
 		}
-		var playURL string
-		var streamURL string
-		if ch.IsCustom && ch.PluginID != "" {
-			playURL = "/" + ch.PluginID + "/player/" + ch.ID + "?q=auto"
-			streamURL = "/" + ch.PluginID + "/" + ch.ID
-		} else {
-			playURL = "/player/" + ch.ID + "?q=auto"
-			streamURL = utils.BuildHLSPlayURL("auto", ch.ID)
-		}
+		playURL, streamURL, usePlayer := tvPlaybackURLs(ch, quality)
 		tvChannels[i] = tvChannel{
 			Channel:   ch,
 			PlayerURL: playURL,
 			StreamURL: streamURL,
+			UsePlayer: usePlayer,
 		}
 		tvChannels[i].LogoURL = logoURL
 	}
@@ -92,6 +84,7 @@ func TVIndexHandler(c *fiber.Ctx) error {
 		"Categories":         television.CategoryMap,
 		"Languages":          television.LanguageMap,
 		"FavoriteChannelIDs": config.Cfg.FavoriteChannelIDs,
+		"Quality":            quality,
 		"Qualities": map[string]string{
 			"auto":   "Auto",
 			"high":   "High",
@@ -99,6 +92,36 @@ func TVIndexHandler(c *fiber.Ctx) error {
 			"low":    "Low",
 		},
 	})
+}
+
+func parseTVFilter(value string) []int {
+	if value == "" {
+		return nil
+	}
+
+	values := make([]int, 0)
+	for _, item := range strings.Split(value, ",") {
+		parsed, err := strconv.Atoi(strings.TrimSpace(item))
+		if err == nil {
+			values = append(values, parsed)
+		}
+	}
+	return values
+}
+
+func tvPlaybackURLs(ch television.Channel, quality string) (playerURL, streamURL string, usePlayer bool) {
+	if ch.IsCustom && ch.PluginID != "" {
+		return "/" + ch.PluginID + "/player/" + ch.ID + "?q=" + url.QueryEscape(quality), "/" + ch.PluginID + "/" + ch.ID, false
+	}
+
+	streamURL = utils.BuildHLSPlayURL(quality, ch.ID)
+	if EnableDRM && !ch.IsCustom && (ch.KeyURL != "" || utils.ContainsString(ch.ID, drmList)) {
+		// A plain video element cannot negotiate Widevine. Send known DRM
+		// channels through the upstream web-player contract instead.
+		return "/mpd/" + ch.ID + "?q=" + url.QueryEscape(quality), streamURL, true
+	}
+
+	return "/player/" + ch.ID + "?q=" + url.QueryEscape(quality), streamURL, false
 }
 
 // TVPlayHandler serves the TV-optimized player page with fullscreen iframe.

@@ -38,6 +38,14 @@
     var id = card.getAttribute("data-channel-id");
     var name = card.getAttribute("data-channel-name") || id;
     var streamUrl = card.getAttribute("data-stream-url");
+    var playerHref = card.getAttribute("href");
+
+    // DRM playback must use the upstream Shaka/Widevine player. A plain
+    // video element can handle the HLS path, but cannot negotiate Widevine.
+    if (card.getAttribute("data-use-player") === "true") {
+      if (playerHref) window.location.href = playerHref;
+      return;
+    }
 
     if (!streamUrl) return;
 
@@ -73,7 +81,7 @@
       playerVideo.play().catch(function(){});
     }
 
-    history.pushState({ overlay: true }, "", "/tv/play/" + id + "?name=" + encodeURIComponent(name));
+    history.pushState({ overlay: true }, "", playerHref || ("/tv/play/" + id + "?name=" + encodeURIComponent(name)));
   }
 
   function closeChannel() {

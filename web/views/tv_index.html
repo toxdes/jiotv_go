@@ -245,12 +245,13 @@
     <div id="tv-channel-grid" class="tv-grid">
       {{range $channel := .Channels}}
       <a
-        href="/tv/play/{{ $channel.ID }}?name={{ urlquery $channel.Name }}"
+        href="/tv/play/{{ $channel.ID }}?name={{ urlquery $channel.Name }}&q={{ urlquery $.Quality }}"
         class="tv-card"
         data-channel-id="{{ $channel.ID }}"
         data-channel-name="{{ $channel.Name }}"
         data-player-url="{{ $channel.PlayerURL }}"
         data-stream-url="{{ $channel.StreamURL }}"
+        data-use-player="{{ $channel.UsePlayer }}"
         tabindex="0"
       >
         <img
