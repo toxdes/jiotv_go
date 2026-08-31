@@ -260,3 +260,65 @@ func TestExtractPremiumProvidersFromAccessToken(t *testing.T) {
 		t.Fatalf("expected FanCode URL from token, got %s", premiumProviders[0].URL)
 	}
 }
+
+// TestPremiumProviderDisplayName covers resolveCatalogProviderID's directory
+// gate: premiumProviderDisplayName must find a display name for every
+// resolution path resolvePremiumProviderID supports, including keyword-only
+// entries with no static ProviderID (e.g. "jiocinema"). Before this was fixed
+// to defer to resolvePremiumProvider, such entries had no display name here,
+// so resolveCatalogProviderID never consulted the directory for them and sent
+// the raw identifier to the catalog/playback APIs instead of a real content
+// provider ID.
+func TestPremiumProviderDisplayName(t *testing.T) {
+	tests := []struct {
+		name               string
+		resolvedProviderID string
+		originalIdentifier string
+		wantDisplayName    string
+	}{
+		{"entitlement ID key", "Z0177", "Z0177", "FanCode"},
+		{"keyword match with a static ProviderID", "FANCODE", "fancode", "FanCode"},
+		{
+			name:               "keyword-only entry with no static ProviderID",
+			resolvedProviderID: "JIOCINEMA",
+			originalIdentifier: "jiocinema",
+			wantDisplayName:    "JioCinema Premium",
+		},
+		{"unknown identifier", "NOPE", "nope", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := premiumProviderDisplayName(tt.resolvedProviderID, tt.originalIdentifier); got != tt.wantDisplayName {
+				t.Errorf("premiumProviderDisplayName(%q, %q) = %q, want %q",
+					tt.resolvedProviderID, tt.originalIdentifier, got, tt.wantDisplayName)
+			}
+		})
+	}
+}
+
+// TestResolvePremiumProviderIDFallback covers the normalization contract
+// resolveCatalogProviderID relies on: an identifier matching no static entry
+// comes back as its own uppercased/trimmed form (so the directory can still
+// be tried against it), not empty - only a genuinely empty/whitespace
+// identifier should produce "".
+func TestResolvePremiumProviderIDFallback(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		want       string
+	}{
+		{"known static ID", "Z0177", "Z0177"},
+		{"unrecognized identifier falls back to normalized form", "  someProvider  ", "SOMEPROVIDER"},
+		{"empty identifier stays empty", "", ""},
+		{"whitespace-only identifier stays empty", "   ", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolvePremiumProviderID(tt.identifier); got != tt.want {
+				t.Errorf("resolvePremiumProviderID(%q) = %q, want %q", tt.identifier, got, tt.want)
+			}
+		})
+	}
+}

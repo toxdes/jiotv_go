@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -36,6 +37,14 @@ var (
 	EnableDRM         bool
 	renderHDNEACache  sync.Map
 	tokenRefreshGroup singleflight.Group
+	// renderChannelDeadCache marks a channel that just exhausted every quality
+	// candidate and still got a 404 - i.e. its manifest path genuinely doesn't
+	// exist right now, not a transient auth hiccup. A live player keeps
+	// polling /render.m3u8 every few seconds regardless, and without this each
+	// poll would independently re-run the full recovery dance (fetch a fresh
+	// live URL, retry, try every quality candidate), hammering Jio's live-URL
+	// API for a channel that isn't coming back within the cooldown window.
+	renderChannelDeadCache sync.Map
 )
 
 const (
@@ -45,11 +54,45 @@ const (
 	REQUEST_USER_AGENT    = headers.UserAgentOkHttp
 	hdneaCacheTTL         = 60 * time.Second // Aggressive TTL: 60 seconds (tokens expire ~90-120s, keep cache short)
 	hdneaRefreshLeadTime  = 20 * time.Second
+	// renderChannelDeadCacheTTL mirrors the JioTV Android app's own default
+	// cooldown for a channel that failed to come up (BroadcastUnicastModel's
+	// BTUS_RETRY_TIMER default, 60s) before it tries bootstrapping again.
+	renderChannelDeadCacheTTL = 60 * time.Second
 )
 
 type hdneaCacheEntry struct {
 	Token     string
 	UpdatedAt time.Time
+}
+
+func isChannelRecentlyDead(channelID string) bool {
+	if channelID == "" {
+		return false
+	}
+	fetchedAtRaw, ok := renderChannelDeadCache.Load(channelID)
+	if !ok {
+		return false
+	}
+	fetchedAt, ok := fetchedAtRaw.(time.Time)
+	if !ok || time.Since(fetchedAt) > renderChannelDeadCacheTTL {
+		renderChannelDeadCache.Delete(channelID)
+		return false
+	}
+	return true
+}
+
+func markChannelDead(channelID string) {
+	if channelID == "" {
+		return
+	}
+	renderChannelDeadCache.Store(channelID, time.Now())
+}
+
+func clearChannelDead(channelID string) {
+	if channelID == "" {
+		return
+	}
+	renderChannelDeadCache.Delete(channelID)
 }
 
 // truncateToken returns first 10 and last 10 chars of token for logging
@@ -722,7 +765,15 @@ func RenderHandler(c *fiber.Ctx) error {
 			utils.Log.Printf("[DEBUG] Auth failure or not found (Status %d) - fetching fresh live URL and auth", statusCode)
 		}
 
-		if channel_id != "" {
+		if statusCode == fiber.StatusNotFound && isChannelRecentlyDead(channel_id) {
+			// This channel's manifest just 404'd across every quality candidate
+			// within the last renderChannelDeadCacheTTL; skip re-running that
+			// same expensive recovery for this poll and let the fresh 404 above
+			// propagate as-is.
+			if os.Getenv("JIOTV_DEBUG") == "true" {
+				utils.Log.Printf("[DEBUG] RenderHandler - channel %s recently exhausted recovery, skipping", channel_id)
+			}
+		} else if channel_id != "" {
 			if refreshedLiveResult, refreshErr := refreshChannelToken(channel_id); refreshErr == nil && refreshedLiveResult != nil {
 				if freshToken := extractLiveResultHDNEA(refreshedLiveResult); freshToken != "" {
 					setCachedHDNEA(hdneaKey, freshToken)
@@ -776,6 +827,17 @@ func RenderHandler(c *fiber.Ctx) error {
 							break
 						}
 					}
+
+					// Every quality candidate still 404'd: this channel's manifest
+					// genuinely doesn't exist right now, so stop the next several
+					// polls from re-running this same recovery against Jio's API.
+					if statusCode == fiber.StatusNotFound {
+						markChannelDead(channel_id)
+					} else {
+						clearChannelDead(channel_id)
+					}
+				} else if statusCode == fiber.StatusOK {
+					clearChannelDead(channel_id)
 				}
 			}
 		}
@@ -1033,6 +1095,7 @@ func ChannelsHandler(c *fiber.Ctx) error {
 	splitCategory := strings.TrimSpace(c.Query("c"))
 	languages := strings.TrimSpace(c.Query("l"))
 	skipGenres := strings.TrimSpace(c.Query("sg"))
+	subFilter := strings.TrimSpace(c.Query("sub"))
 	apiResponse, err := television.Channels()
 	if err != nil {
 		return ErrorMessageHandler(c, err)
@@ -1054,7 +1117,7 @@ func ChannelsHandler(c *fiber.Ctx) error {
 			channels = television.FilterFavoriteChannels(apiResponse.Result)
 		}
 
-		m3uContent := GenerateM3UPlaylist(channels, hostURL, quality, splitCategory, languages, skipGenres)
+		m3uContent := GenerateM3UPlaylist(channels, hostURL, quality, splitCategory, languages, skipGenres, subFilter)
 
 		// Set the Content-Disposition header for file download
 		c.Set("Content-Disposition", "attachment; filename=jiotv_playlist.m3u")
@@ -1297,7 +1360,8 @@ func PlaylistHandler(c *fiber.Ctx) error {
 	splitCategory := c.Query("c")
 	languages := c.Query("l")
 	skipGenres := c.Query("sg")
-	return c.Redirect("/channels?type=m3u&q="+quality+"&c="+splitCategory+"&l="+languages+"&sg="+skipGenres, fiber.StatusMovedPermanently)
+	subFilter := c.Query("sub")
+	return c.Redirect("/channels?type=m3u&q="+quality+"&c="+splitCategory+"&l="+languages+"&sg="+skipGenres+"&sub="+subFilter, fiber.StatusMovedPermanently)
 }
 
 // ImageHandler loads image from JioTV server
@@ -1306,12 +1370,27 @@ func ImageHandler(c *fiber.Ctx) error {
 	return internalUtils.ProxyRequest(c, url, TV.Client, REQUEST_USER_AGENT)
 }
 
+// DASHTimeHandler serves a UTC timestamp for DASH clock sync (UTCTiming).
+// The proxied MPD's segment timeline is stamped with the upstream CDN's
+// clock, so this returns the CDN's extrapolated clock when one has been
+// observed (see recordCdnPublishTime), falling back to the machine clock
+// before the first MPD fetch. Serving the machine clock directly stalls live
+// playback whenever it differs from the CDN clock: players compute the live
+// edge minutes away from the actual segments.
 func DASHTimeHandler(c *fiber.Ctx) error {
-	return c.SendString(time.Now().UTC().Format("2006-01-02T15:04:05.000Z"))
+	now := time.Now().UTC()
+	if cdn, ok := cdnNow(); ok {
+		now = cdn.UTC()
+	}
+	// The Shaka player reads the Date header when clockSyncUri uses the
+	// http-head UTCTiming scheme, so make sure it is present even if the
+	// HTTP framework does not add it automatically.
+	c.Set("Date", now.Format(http.TimeFormat))
+	return c.SendString(now.Format("2006-01-02T15:04:05.000Z"))
 }
 
 // GenerateM3UPlaylist generates an M3U playlist string from a list of channels
-func GenerateM3UPlaylist(channels []television.Channel, hostURL, quality, splitCategory, languages, skipGenres string) string {
+func GenerateM3UPlaylist(channels []television.Channel, hostURL, quality, splitCategory, languages, skipGenres, subFilter string) string {
 	var m3uContent strings.Builder
 	m3uContent.WriteString("#EXTM3U x-tvg-url=\"")
 	m3uContent.WriteString(hostURL)
@@ -1325,6 +1404,17 @@ func GenerateM3UPlaylist(channels []television.Channel, hostURL, quality, splitC
 
 		if skipGenres != "" && utils.ContainsString(television.CategoryMap[channel.Category], strings.Split(skipGenres, ",")) {
 			continue
+		}
+
+		switch subFilter {
+		case "hide":
+			if channel.RequiresSubscription {
+				continue
+			}
+		case "only":
+			if !channel.RequiresSubscription {
+				continue
+			}
 		}
 
 		var channelURL string

@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jiotv-go/jiotv_go/v3/internal/config"
@@ -242,6 +244,49 @@ func TestRenderHandler(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRenderChannelDeadCache covers the negative cache that stops a live
+// player's repeated polling from re-running RenderHandler's full recovery
+// dance (fresh live URL + every quality candidate) against Jio's API once a
+// channel's manifest has already been confirmed missing.
+func TestRenderChannelDeadCache(t *testing.T) {
+	t.Run("unmarked channel is not recently dead", func(t *testing.T) {
+		id := "test-channel-unmarked"
+		defer clearChannelDead(id)
+		if isChannelRecentlyDead(id) {
+			t.Error("isChannelRecentlyDead() = true for a channel that was never marked")
+		}
+	})
+
+	t.Run("marked channel is recently dead until cleared", func(t *testing.T) {
+		id := "test-channel-marked"
+		defer clearChannelDead(id)
+		markChannelDead(id)
+		if !isChannelRecentlyDead(id) {
+			t.Error("isChannelRecentlyDead() = false immediately after markChannelDead()")
+		}
+		clearChannelDead(id)
+		if isChannelRecentlyDead(id) {
+			t.Error("isChannelRecentlyDead() = true after clearChannelDead()")
+		}
+	})
+
+	t.Run("expired mark is treated as not dead", func(t *testing.T) {
+		id := "test-channel-expired"
+		defer clearChannelDead(id)
+		renderChannelDeadCache.Store(id, time.Now().Add(-2*renderChannelDeadCacheTTL))
+		if isChannelRecentlyDead(id) {
+			t.Error("isChannelRecentlyDead() = true for a mark older than renderChannelDeadCacheTTL")
+		}
+	})
+
+	t.Run("empty channel ID is never dead", func(t *testing.T) {
+		markChannelDead("")
+		if isChannelRecentlyDead("") {
+			t.Error("isChannelRecentlyDead(\"\") = true; empty channel ID must never be cached")
+		}
+	})
 }
 
 func TestSLHandler(t *testing.T) {
@@ -496,6 +541,86 @@ func TestDASHTimeHandler(t *testing.T) {
 	}
 }
 
+// TestDASHTimeHandlerServesCDNClock verifies that /dashtime reports the
+// upstream CDN clock (recorded from the MPD publishTime) rather than the
+// machine clock, so players sync to the clock the segment timeline uses.
+func TestDASHTimeHandlerServesCDNClock(t *testing.T) {
+	origPT, origFA := cdnPublishTime, cdnPublishFetchedAt
+	t.Cleanup(func() {
+		cdnClockMu.Lock()
+		defer cdnClockMu.Unlock()
+		cdnPublishTime, cdnPublishFetchedAt = origPT, origFA
+	})
+	// Guarantee the fallback path regardless of test ordering.
+	cdnClockMu.Lock()
+	cdnPublishTime, cdnPublishFetchedAt = time.Time{}, time.Time{}
+	cdnClockMu.Unlock()
+
+	// No observation yet -> falls back to the machine clock (current year).
+	c := createMockFiberContext("GET", "/dashtime")
+	if err := DASHTimeHandler(c); err != nil {
+		t.Fatalf("DASHTimeHandler() error = %v", err)
+	}
+	if body := string(c.Response().Body()); !strings.Contains(body, fmt.Sprintf("%d-", time.Now().UTC().Year())) {
+		t.Errorf("fallback DASHTimeHandler body = %q, want current-year prefix", body)
+	}
+
+	// With an observed CDN clock, the served time must follow it.
+	recordCdnPublishTime(time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC))
+	c2 := createMockFiberContext("GET", "/dashtime")
+	if err := DASHTimeHandler(c2); err != nil {
+		t.Fatalf("DASHTimeHandler() error = %v", err)
+	}
+	if body := string(c2.Response().Body()); !strings.Contains(body, "2030-01-01T00:00:") {
+		t.Errorf("DASHTimeHandler body = %q, want extrapolated CDN clock 2030-01-01T00:00:xx", body)
+	}
+}
+
+// TestExtractPublishTime verifies publishTime is parsed from live MPD bodies
+// and absent when the attribute is missing.
+func TestExtractPublishTime(t *testing.T) {
+	body := []byte(`<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic" availabilityStartTime="1970-01-01T00:00:00Z" publishTime="2026-08-12T20:15:49.537686Z" minimumUpdatePeriod="PT2S">`)
+	pt, ok := extractPublishTime(body)
+	if !ok {
+		t.Fatal("expected publishTime to be extracted")
+	}
+	want := time.Date(2026, 8, 12, 20, 15, 49, 537686000, time.UTC)
+	if !pt.Equal(want) {
+		t.Errorf("extractPublishTime() = %v, want %v", pt, want)
+	}
+	if _, ok := extractPublishTime([]byte(`<MPD></MPD>`)); ok {
+		t.Error("expected no publishTime match for MPD without the attribute")
+	}
+}
+
+// TestCDNClockExtrapolation verifies cdnNow returns the recorded publishTime
+// plus elapsed time and reports false before any observation exists.
+func TestCDNClockExtrapolation(t *testing.T) {
+	origPT, origFA := cdnPublishTime, cdnPublishFetchedAt
+	t.Cleanup(func() {
+		cdnClockMu.Lock()
+		defer cdnClockMu.Unlock()
+		cdnPublishTime, cdnPublishFetchedAt = origPT, origFA
+	})
+
+	if _, ok := cdnNow(); ok {
+		t.Error("cdnNow should report false before any publishTime is recorded")
+	}
+
+	fixed := time.Date(2026, 8, 12, 20, 15, 49, 0, time.UTC)
+	recordCdnPublishTime(fixed)
+	got, ok := cdnNow()
+	if !ok {
+		t.Fatal("cdnNow should report true after recording")
+	}
+	if got.Before(fixed) {
+		t.Errorf("cdnNow %v is before recorded publishTime %v", got, fixed)
+	}
+	if got.Sub(fixed) > 2*time.Second {
+		t.Errorf("cdnNow %v extrapolated too far from %v", got, fixed)
+	}
+}
+
 // TestCustomChannelLogoURL tests logo URL handling for custom channels
 // This ensures custom channels with full URLs aren't incorrectly prefixed with /jtvimage/
 func TestCustomChannelLogoURL(t *testing.T) {
@@ -745,7 +870,7 @@ func TestChannelsHandlerM3UDRM(t *testing.T) {
 			}
 
 			// Generate playlist
-			playlist := GenerateM3UPlaylist(mockChannels, hostURL, tc.quality, "", "", "")
+			playlist := GenerateM3UPlaylist(mockChannels, hostURL, tc.quality, "", "", "", "")
 
 			// Verify the output contains the expected elements
 			if !strings.Contains(playlist, tc.expectedURL) {
@@ -758,6 +883,92 @@ func TestChannelsHandlerM3UDRM(t *testing.T) {
 			// Verify non-DRM shouldn't have KODIPROP tags
 			if tc.expectedProps == "" && strings.Contains(playlist, "#KODIPROP") {
 				t.Errorf("Expected playlist to NOT contain KODIPROP tags, but found them: \n%s", playlist)
+			}
+		})
+	}
+}
+
+func TestGenerateM3UPlaylistSubscriptionFilter(t *testing.T) {
+	const (
+		freeChannelID = "100"
+		paidChannelID = "200"
+	)
+
+	// One channel of each kind, identical in every other respect
+	mockChannels := []television.Channel{
+		{
+			ID:       freeChannelID,
+			Name:     "Free Channel",
+			LogoURL:  "free.png",
+			Category: 1, // Entertainment
+			Language: 1, // Hindi
+		},
+		{
+			ID:                   paidChannelID,
+			Name:                 "Paid Channel",
+			LogoURL:              "paid.png",
+			Category:             1, // Entertainment
+			Language:             1, // Hindi
+			RequiresSubscription: true,
+		},
+	}
+
+	testCases := []struct {
+		name       string
+		subFilter  string
+		expectFree bool
+		expectPaid bool
+	}{
+		{
+			name:       "AbsentKeepsEveryChannel",
+			subFilter:  "",
+			expectFree: true,
+			expectPaid: true,
+		},
+		{
+			name:       "HideDropsSubscriptionChannels",
+			subFilter:  "hide",
+			expectFree: true,
+			expectPaid: false,
+		},
+		{
+			name:       "OnlyKeepsSubscriptionChannels",
+			subFilter:  "only",
+			expectFree: false,
+			expectPaid: true,
+		},
+		{
+			name:       "UnknownValueFallsBackToDefault",
+			subFilter:  "banana",
+			expectFree: true,
+			expectPaid: true,
+		},
+		{
+			// Booleans are deliberately not accepted as aliases, because
+			// "true" is ambiguous between "include them" and "only them".
+			name:       "BooleanIsNotAnAlias",
+			subFilter:  "true",
+			expectFree: true,
+			expectPaid: true,
+		},
+	}
+
+	hostURL := "http://localhost:5001"
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			playlist := GenerateM3UPlaylist(mockChannels, hostURL, "", "", "", "", tc.subFilter)
+
+			// Assert on tvg-id rather than counting lines, so that dropping
+			// the wrong channel fails instead of passing on the right count
+			freeTag := `tvg-id="` + freeChannelID + `"`
+			paidTag := `tvg-id="` + paidChannelID + `"`
+
+			if got := strings.Contains(playlist, freeTag); got != tc.expectFree {
+				t.Errorf("sub=%q: free channel present = %v, want %v, got: \n%s", tc.subFilter, got, tc.expectFree, playlist)
+			}
+			if got := strings.Contains(playlist, paidTag); got != tc.expectPaid {
+				t.Errorf("sub=%q: subscription channel present = %v, want %v, got: \n%s", tc.subFilter, got, tc.expectPaid, playlist)
 			}
 		})
 	}

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/valyala/fasthttp"
 	"gopkg.in/yaml.v3"
@@ -136,7 +137,7 @@ func New(credentials *utils.JIOTV_CREDENTIALS) *Television {
 		"uniqueId":        credentials.UniqueID,
 		headers.UserAgent: headers.UserAgentOkHttp,
 		"usergroup":       "tvYR7NSNn7rymo3F",
-		"versionCode":     headers.VersionCode413,
+		"versionCode":     headers.VersionCode422,
 	}
 
 	// Create a fasthttp.Client
@@ -629,7 +630,7 @@ func buildAuthenticatedHeaders(credentials *utils.JIOTV_CREDENTIALS) map[string]
 		headers.Accept:      headers.AcceptJSON,
 		headers.DeviceType:  headers.DeviceTypePhone,
 		headers.OS:          headers.OSAndroid,
-		headers.VersionCode: headers.VersionCode413,
+		headers.VersionCode: headers.VersionCode422,
 		"appkey":            "NzNiMDhlYzQyNjJm",
 		"lbcookie":          "1",
 		"usertype":          "JIO",
@@ -740,18 +741,51 @@ func collectPlanProviders(planProviders []PlanProvider, premiumProviders *[]Prem
 // each provider's short name (lowercased, e.g. "fancode") to the content
 // provider ID used by the catalog API (e.g. "200169"). Requesting the document
 // without a providerId returns every provider.
+// providerDirectoryCacheTTL bounds how long the /cnf/provider directory is
+// reused before being re-fetched. The directory changes rarely, but every
+// premium catalog browse and playback request resolves through it, so
+// without a cache each one is an extra live round trip to Jio's servers.
+const providerDirectoryCacheTTL = 5 * time.Minute
+
+// providerDirectoryFetchTimeout bounds the /cnf/provider request itself.
+// fetchProviderDirectory now sits on the catalog/playback hot path (via
+// resolveCatalogProviderID), and the shared fasthttp.Client has no
+// ReadTimeout, so without this a slow/hung response would block those
+// requests indefinitely instead of falling back to the static provider ID.
+// 45s mirrors the app's own worst case for this endpoint: its
+// ProviderConfigNetworkModule OkHttpClient allows 15s to connect plus 30s to
+// read (fasthttp.DoTimeout is one combined deadline, so the two are summed).
+const providerDirectoryFetchTimeout = 45 * time.Second
+
+var (
+	providerDirectoryMu        sync.Mutex
+	providerDirectoryCache     map[string]string
+	providerDirectoryFetchedAt time.Time
+)
+
 func fetchProviderDirectory(client *fasthttp.Client, requestHeaders map[string]string) (map[string]string, error) {
-	requestConfig := utils.HTTPRequestConfig{
-		URL:     strings.TrimRight(PROVIDER_CONFIG_API_BASE_URL, "/") + "/cnf/provider",
-		Method:  "GET",
-		Headers: requestHeaders,
+	providerDirectoryMu.Lock()
+	if providerDirectoryCache != nil && time.Since(providerDirectoryFetchedAt) < providerDirectoryCacheTTL {
+		cached := providerDirectoryCache
+		providerDirectoryMu.Unlock()
+		return cached, nil
+	}
+	providerDirectoryMu.Unlock()
+
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.SetRequestURI(strings.TrimRight(PROVIDER_CONFIG_API_BASE_URL, "/") + "/cnf/provider")
+	req.Header.SetMethod("GET")
+	req.Header.SetUserAgent(headers.UserAgentOkHttp)
+	for key, value := range requestHeaders {
+		req.Header.Set(key, value)
 	}
 
-	resp, err := utils.MakeHTTPRequest(requestConfig, client)
-	if err != nil {
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(resp)
+	if err := client.DoTimeout(req, resp, providerDirectoryFetchTimeout); err != nil {
 		return nil, err
 	}
-	defer fasthttp.ReleaseResponse(resp)
 
 	var directoryResponse PremiumProviderFilterResponse
 	if err := utils.ParseJSONResponse(resp, &directoryResponse); err != nil {
@@ -771,6 +805,11 @@ func fetchProviderDirectory(client *fasthttp.Client, requestHeaders map[string]s
 			providerDirectory[providerName] = providerID
 		}
 	}
+
+	providerDirectoryMu.Lock()
+	providerDirectoryCache = providerDirectory
+	providerDirectoryFetchedAt = time.Now()
+	providerDirectoryMu.Unlock()
 
 	return providerDirectory, nil
 }
@@ -1073,7 +1112,58 @@ func resolvePremiumProviderID(providerIdentifier string) string {
 		}
 	}
 
+	// No static entry matched; hand back the normalized identifier so callers
+	// can still try resolving it (e.g. against the live provider directory)
+	// without redoing this same normalization themselves.
+	return upperIdentifier
+}
+
+// premiumProviderDisplayName finds the display name backing a statically
+// registered provider entry, so its real content provider ID can be looked
+// up in the directory. It defers to resolvePremiumProvider, which is the
+// single place that knows about all three provider tables (by ID, by plan
+// ID via the resolved ID, and by keyword via the original identifier) -
+// duplicating that lookup here previously left keyword-only entries such as
+// "jiocinema" (which has no static ProviderID) with no display name, so
+// resolveCatalogProviderID never consulted the directory for them and sent
+// the raw identifier to the catalog/playback APIs instead.
+func premiumProviderDisplayName(resolvedProviderID, originalIdentifier string) string {
+	if providerLink, exists := resolvePremiumProvider(resolvedProviderID, originalIdentifier); exists {
+		return providerLink.DisplayName
+	}
 	return ""
+}
+
+// resolveCatalogProviderID resolves a URL path identifier to the content
+// provider ID required by the catalog and playback APIs. providerIdentifier
+// may already be a content provider ID, or it may be an unresolved
+// entitlement ID such as "Z0177" that a Premium providers link can carry
+// when PremiumProviders() itself failed to resolve it against the
+// directory. In the latter case, the directory is consulted again here the
+// same way, so a request that reaches the catalog/playback APIs always uses
+// a real content provider ID rather than an entitlement ID they reject.
+func resolveCatalogProviderID(client *fasthttp.Client, credentials *utils.JIOTV_CREDENTIALS, providerIdentifier string) string {
+	staticProviderID := resolvePremiumProviderID(providerIdentifier)
+	if staticProviderID == "" {
+		return ""
+	}
+
+	displayName := premiumProviderDisplayName(staticProviderID, providerIdentifier)
+	if displayName == "" {
+		return staticProviderID
+	}
+
+	providerDirectory, directoryErr := fetchProviderDirectory(client, buildProviderConfigHeaders(credentials))
+	if directoryErr != nil {
+		utils.SafeLogf("Unable to fetch provider directory while resolving %s: %v", providerIdentifier, directoryErr)
+		return staticProviderID
+	}
+
+	if contentProviderID, matched := lookupContentProviderID([]string{displayName}, providerDirectory); matched {
+		return contentProviderID
+	}
+
+	return staticProviderID
 }
 
 // buildPlansAPIHeaders builds headers for the subscription packs API
@@ -1093,7 +1183,7 @@ func buildActivePlansHeaders(credentials *utils.JIOTV_CREDENTIALS) map[string]st
 		headers.Accept:      headers.AcceptJSON,
 		headers.DeviceType:  headers.DeviceTypePhone,
 		headers.OS:          headers.OSAndroid,
-		headers.VersionCode: headers.VersionCode413,
+		headers.VersionCode: headers.VersionCode422,
 		"Connection":        "close",
 	}
 	if credentials == nil {
@@ -1560,16 +1650,14 @@ func PremiumProviderCatalog(providerIdentifier string, page, limit int) (Premium
 		return result, errors.New("missing access token")
 	}
 
-	providerID := resolvePremiumProviderID(providerIdentifier)
-	if providerID == "" {
-		providerID = strings.ToUpper(strings.TrimSpace(providerIdentifier))
-	}
+	client := utils.GetRequestClient()
+
+	providerID := resolveCatalogProviderID(client, credentials, providerIdentifier)
 	if providerID == "" {
 		return result, errors.New("invalid provider identifier")
 	}
 	result.ProviderID = providerID
 
-	client := utils.GetRequestClient()
 	configHeaders := buildProviderConfigHeaders(credentials)
 	catalogHeaders := buildProviderCatalogHeaders(credentials)
 
@@ -1733,10 +1821,9 @@ func PremiumProviderPlayback(providerIdentifier string, playRequest PremiumProvi
 		return nil, errors.New("missing access token")
 	}
 
-	providerID := resolvePremiumProviderID(providerIdentifier)
-	if providerID == "" {
-		providerID = strings.ToUpper(strings.TrimSpace(providerIdentifier))
-	}
+	tv := New(credentials)
+
+	providerID := resolveCatalogProviderID(tv.Client, credentials, providerIdentifier)
 	if providerID == "" {
 		return nil, errors.New("invalid provider identifier")
 	}
@@ -1767,7 +1854,6 @@ func PremiumProviderPlayback(providerIdentifier string, playRequest PremiumProvi
 		return nil, fmt.Errorf("unsupported streamType: %s", streamType)
 	}
 
-	tv := New(credentials)
 	formData := fasthttp.AcquireArgs()
 	defer fasthttp.ReleaseArgs(formData)
 
