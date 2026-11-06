@@ -322,6 +322,26 @@ func calculateNextCredentialValidationTime(credentials *utils.JIOTV_CREDENTIALS,
 	return closest
 }
 
+func canReuseInitialMPD(channelID, quality, auth, streamURL string) bool {
+	entryRaw, ok := drmMpdCache.Load(channelID + "_" + quality)
+	if !ok {
+		return false
+	}
+	entry, ok := entryRaw.(drmMpdCacheEntry)
+	if !ok || entry.Output == nil {
+		return false
+	}
+	age := time.Since(entry.UpdatedAt)
+	if age < 0 || age > 5*time.Second {
+		return false
+	}
+	if remaining, known := hdneaRemainingLifetime(extractHDNEAFromURL(streamURL)); known && remaining <= hdneaRefreshLeadTime {
+		return false
+	}
+	cachedURL, err := url.Parse(entry.Output.PlayUrl)
+	return err == nil && cachedURL.Path == "/render.mpd" && cachedURL.Query().Get("auth") == auth
+}
+
 // getDrmMpd returns required properties for rendering DRM MPD
 func getDrmMpd(channelID, quality string) (*DrmMpdOutput, error) {
 	cacheKey := channelID + "_" + quality
@@ -619,6 +639,7 @@ func MpdHandler(c *fiber.Ctx) error {
 	// would return the CDN's host and scheme instead of ours.
 	localServerURL := c.Protocol() + "://" + c.Hostname()
 
+	initialRequestURL := strings.Clone(c.OriginalURL())
 	channelID := c.Query("channel_id")
 	quality := c.Query("q")
 	proxyUrl := c.Query("auth")
@@ -640,7 +661,8 @@ func MpdHandler(c *fiber.Ctx) error {
 		return fmt.Errorf("invalid auth token: %w", err)
 	}
 
-	if channelID != "" {
+	reuseInitial := c.Query("startup") == "1" && canReuseInitialMPD(channelID, quality, proxyUrl, decryptedUrl)
+	if channelID != "" && !reuseInitial {
 		if liveResult, liveErr := TV.Live(channelID); liveErr == nil && liveResult != nil {
 			if freshUrl := selectBestLiveMPDURL(liveResult, quality); freshUrl != "" {
 				decryptedUrl = freshUrl
@@ -702,6 +724,17 @@ func MpdHandler(c *fiber.Ctx) error {
 	// that still fails, avoiding a blocking token refresh on every expired
 	// manifest request.
 	statusCode := c.Response().StatusCode()
+	if reuseInitial && (statusCode == fiber.StatusForbidden || statusCode == fiber.StatusUnauthorized || statusCode == fiber.StatusNotFound) {
+		retryURL, parseErr := url.Parse(initialRequestURL)
+		if parseErr != nil {
+			return fiber.ErrBadRequest
+		}
+		query := retryURL.Query()
+		query.Del("startup")
+		retryURL.RawQuery = query.Encode()
+		c.Response().Reset()
+		return c.Redirect(retryURL.RequestURI(), fiber.StatusTemporaryRedirect)
+	}
 	if statusCode == fiber.StatusForbidden || statusCode == fiber.StatusUnauthorized {
 		if os.Getenv("JIOTV_DEBUG") == "true" {
 			utils.Log.Printf("[DEBUG] MpdHandler got %d response - stripping HDNEA and retrying", statusCode)

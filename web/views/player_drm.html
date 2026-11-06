@@ -246,6 +246,7 @@
 
         player.configure({
           manifest: {
+            defaultPresentationDelay: 8,
             dash: {
               // JioTV live MPDs have no UTCTiming element; point Shaka at the
               // server clock (/dashtime returns an ISO timestamp and a Date
@@ -385,7 +386,15 @@
           });
 
         try {
-          await player.load("{{ .play_url }}");
+          let playURL = "{{ .play_url }}";
+          if (isTV2Frame()) {
+            const initialManifest = new URL(playURL, window.location.href);
+            if (initialManifest.origin === window.location.origin && initialManifest.pathname === "/render.mpd") {
+              initialManifest.searchParams.set("startup", "1");
+              playURL = initialManifest.toString();
+            }
+          }
+          await player.load(playURL);
           preferHindiAudio();
           publishTV2AudioTracks();
           try {

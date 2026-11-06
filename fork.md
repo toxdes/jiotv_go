@@ -22,3 +22,6 @@ This fork adds two TV-focused interfaces alongside the upstream application.
 - Programme-guide navigation and a clear message when programme information is unavailable
 - Favourites mode, channel-number entry, and a full channel guide
 - Audio-language selection using the Blue remote button or `L` key, with Hindi preferred when available
+- Playback fixes for channels that previously loaded without video
+- A small live-broadcast delay to reduce buffering
+- Reuse of fresh stream information during startup, with automatic refresh when needed
