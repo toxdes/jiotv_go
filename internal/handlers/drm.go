@@ -674,27 +674,23 @@ func MpdHandler(c *fiber.Ctx) error {
 		cachedHDNEA = chd
 	}
 
-	dashBaseURL := fmt.Sprintf("/render.dash/host/%s/path/%s", encProxyHost, encProxyPath)
+	dashPrefix := "/render.dash"
+	if channelID != "" {
+		dashPrefix += "/channel/" + url.PathEscape(channelID)
+	}
+	dashBaseURL := fmt.Sprintf("%s/host/%s/path/%s", dashPrefix, encProxyHost, encProxyPath)
 	if cachedHDNEA != "" {
 		encHDNEA, encErr := secureurl.EncryptURLDeterministic("__hdnea__=" + cachedHDNEA)
 		if encErr == nil {
-			dashBaseURL = fmt.Sprintf("/render.dash/host/%s/path/%s/hdnea/%s", encProxyHost, encProxyPath, encHDNEA)
+			dashBaseURL = fmt.Sprintf("%s/host/%s/path/%s/hdnea/%s", dashPrefix, encProxyHost, encProxyPath, encHDNEA)
 		}
 	}
-
-	// proxyQuery := parsedUrl.RawQuery
-
-	c.Request().Header.Set("Host", proxyHost)
-	c.Request().Header.Set("User-Agent", PLAYER_USER_AGENT)
 
 	// Request path with query params
 	requestUrl := decryptedUrl
 
-	c.Request().Header.Set("User-Agent", PLAYER_USER_AGENT)
-	// remove Accept-Encoding header
-	c.Request().Header.Del("Accept-Encoding")
-
 	// AGGRESSIVE REFRESH: Make initial proxy request
+	setMediaHeaders(c, requestUrl, channelID)
 	if err := proxy.Do(c, requestUrl, TV.Client); err != nil {
 		return err
 	}
@@ -727,6 +723,7 @@ func MpdHandler(c *fiber.Ctx) error {
 			}
 		}
 
+		setMediaHeaders(c, strippedUrl, channelID)
 		if err := proxy.Do(c, strippedUrl, TV.Client); err != nil {
 			if os.Getenv("JIOTV_DEBUG") == "true" {
 				utils.Log.Printf("[DEBUG] MpdHandler retry failed: %v", err)
@@ -742,6 +739,7 @@ func MpdHandler(c *fiber.Ctx) error {
 			}
 			c.Response().Reset()
 			ForceRefreshCredentials()
+			setMediaHeaders(c, strippedUrl, channelID)
 			if err := proxy.Do(c, strippedUrl, TV.Client); err != nil {
 				if os.Getenv("JIOTV_DEBUG") == "true" {
 					utils.Log.Printf("[DEBUG] MpdHandler forced-refresh retry failed: %v", err)
@@ -767,7 +765,7 @@ func MpdHandler(c *fiber.Ctx) error {
 	if upstreamHDNEA != "" {
 		encHDNEA, encErr := secureurl.EncryptURLDeterministic("__hdnea__=" + upstreamHDNEA)
 		if encErr == nil {
-			dashBaseURL = fmt.Sprintf("/render.dash/host/%s/path/%s/hdnea/%s", encProxyHost, encProxyPath, encHDNEA)
+			dashBaseURL = fmt.Sprintf("%s/host/%s/path/%s/hdnea/%s", dashPrefix, encProxyHost, encProxyPath, encHDNEA)
 		}
 	}
 
@@ -840,6 +838,14 @@ func DashHandler(c *fiber.Ctx) error {
 	proxyPath := c.Query("path")
 	requestPath := string(c.Request().URI().Path())
 	requestQuery := string(c.Request().URI().QueryString())
+	channelID := c.Query("channel_id")
+	if strings.HasPrefix(requestPath, "/render.dash/channel/") {
+		parts := strings.SplitN(strings.TrimPrefix(requestPath, "/render.dash/channel/"), "/host/", 2)
+		if len(parts) == 2 {
+			channelID = parts[0]
+			requestPath = "/render.dash/host/" + parts[1]
+		}
+	}
 
 	// Extract embedded HDNEA if present
 	var hdneaToken string
@@ -929,16 +935,11 @@ func DashHandler(c *fiber.Ctx) error {
 	EnsureFreshCredentials()
 
 	// AGGRESSIVE REFRESH: Make initial proxy request
+	setMediaHeaders(c, proxyUrl, channelID)
 	if err := proxy.Do(c, proxyUrl, TV.Client); err != nil {
 		return err
 	}
 
-	// Handle 403/401 auth failures by clearing the stale HDNEA cookie and
-	// retrying. Segment requests carry only the CDN's __hdnea__ cookie (not
-	// the JioTV session tokens), so an expired token is a CDN auth problem:
-	// dropping the cookie lets the CDN issue fresh auth without the cost of a
-	// blocking token refresh on every expired segment request. A full refresh
-	// is attempted only if the retry still fails.
 	statusCode := c.Response().StatusCode()
 	if statusCode == fiber.StatusForbidden || statusCode == fiber.StatusUnauthorized {
 		if os.Getenv("JIOTV_DEBUG") == "true" {
@@ -952,6 +953,7 @@ func DashHandler(c *fiber.Ctx) error {
 		// CDN will provide fresh HDNEA in the response
 		c.Request().Header.DelCookie("__hdnea__")
 
+		setMediaHeaders(c, proxyUrl, channelID)
 		if err := proxy.Do(c, proxyUrl, TV.Client); err != nil {
 			if os.Getenv("JIOTV_DEBUG") == "true" {
 				utils.Log.Printf("[DEBUG] DashHandler retry failed: %v", err)
@@ -967,6 +969,7 @@ func DashHandler(c *fiber.Ctx) error {
 			}
 			c.Response().Reset()
 			ForceRefreshCredentials()
+			setMediaHeaders(c, proxyUrl, channelID)
 			if err := proxy.Do(c, proxyUrl, TV.Client); err != nil {
 				if os.Getenv("JIOTV_DEBUG") == "true" {
 					utils.Log.Printf("[DEBUG] DashHandler forced-refresh retry failed: %v", err)

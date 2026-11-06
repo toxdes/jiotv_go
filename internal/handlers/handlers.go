@@ -1040,6 +1040,7 @@ func RenderTSHandler(c *fiber.Ctx) error {
 		}
 	}
 
+	setMediaHeaders(c, decoded_url, channelID)
 	if err := internalUtils.ProxyRequest(c, decoded_url, TV.Client, PLAYER_USER_AGENT); err != nil {
 		return err
 	}
@@ -1063,6 +1064,7 @@ func RenderTSHandler(c *fiber.Ctx) error {
 			}
 		}
 
+		setMediaHeaders(c, retryUrl, channelID)
 		if err := internalUtils.ProxyRequest(c, retryUrl, TV.Client, PLAYER_USER_AGENT); err != nil {
 			return err
 		}

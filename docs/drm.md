@@ -11,3 +11,15 @@ We have implemented a new DRM component for the web which enables new channels t
 *   **Community Support:** You are free to discuss this on the community support group, but please **do not** bother admins and moderators with how-to questions regarding this experimental feature.
 
 See [config.md](./config.md#drm-digital-rights-management) for how to enable/disable DRM.
+
+## Subscriber-token errors
+
+An upstream manifest response with `X-Error-Details: No sub Token` means the
+CDN rejected the request before Widevine license negotiation. The media proxy
+sends the current JioTV session and channel headers to HTTPS Jio media/CDN
+hosts for manifests and segments, and rebuilds those headers after session
+refresh. Partner CDNs continue to use their own URL/cookie authentication.
+
+If this error persists, check the first failed `/render.mpd` request before
+investigating an HLS fallback. Record the status and error headers without
+sharing encrypted `auth` parameters, session tokens, or cookies.
