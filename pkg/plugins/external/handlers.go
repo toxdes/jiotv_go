@@ -143,6 +143,9 @@ func (p *Plugin) handlePlaylist(c *fiber.Ctx, targetURLStr string) {
 func (p *Plugin) LiveHandler(c *fiber.Ctx) error {
 	id := c.Params("id")
 	id = strings.Replace(id, ".m3u8", "", 1)
+	if p.vodEnabled(id) {
+		return p.vodLiveHandler(c, id)
+	}
 
 	videoURL, found := p.urlCache.Get(id)
 	if !found {
@@ -173,6 +176,9 @@ func (p *Plugin) PlayHandler(c *fiber.Ctx) error {
 
 func (p *Plugin) PlayerHandler(c *fiber.Ctx) error {
 	id := c.Params("id")
+	if p.vodEnabled(id) {
+		return p.vodPlayerHandler(c, id)
+	}
 	playURL := "/" + p.Name + "/" + id + ".m3u8"
 	internalUtils.SetCacheHeader(c, 3600)
 	return c.Render("views/player_hls", fiber.Map{
@@ -308,6 +314,10 @@ func (p *Plugin) LogoHandler(c *fiber.Ctx) error {
 
 func (p *Plugin) RegisterRoutes(app *fiber.App) {
 	prefix := "/" + p.Name
+	app.Get(prefix+"/vod/resource/:stream/:auth", p.vodResourceHandler)
+	app.Post(prefix+"/vod/license/:stream", p.vodLicenseHandler)
+	app.Get(prefix+"/vod/certificate/:stream", p.vodLicenseHandler)
+	app.Get(prefix+"/vod/selection/:id", p.vodSelectionHandler)
 	app.Get(prefix+"/:id", p.LiveHandler)
 	app.Get(prefix+"/play/:id", p.PlayHandler)
 	app.Get(prefix+"/player/:id", p.PlayerHandler)

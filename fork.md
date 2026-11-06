@@ -26,3 +26,30 @@ This fork adds two TV-focused interfaces alongside the upstream application.
 - A small live-broadcast delay to reduce buffering
 - Reuse of fresh stream information during startup, with automatic refresh when needed
 - If a high-quality stream is missing, `/tv2` retries it before trying auto quality
+
+## Experimental plugin VOD
+
+Optionally replaces configured plugin channels with on-demand content matched
+from their programme guide. Shows use the latest available episode; movies play
+directly. Per-channel fallback rules can choose random show episodes or movies
+filtered by language and rating. Playback uses `/tv2` without seek controls.
+The feature is disabled by default; numeric channels retain normal playback.
+
+To set up:
+
+1. Serve a plugin JSON containing the channel list and a `vod` adapter, then
+   register its URL in `plugins` as usual. Configure any fallback rules there.
+2. Serve a valid account session JSON from a privately accessible HTTP(S) URL,
+   separate from the public plugin JSON. Use HTTPS outside a trusted network.
+3. Enable it in the server config:
+
+   ```toml
+   experimental_plugin_vod = true
+   plugin_vod_session_url = "https://private.example.com/session.json"
+   ```
+
+4. Restart the server and open the configured channel in `/tv2`. When account
+   credentials expire, replace the served session JSON; no restart is needed.
+
+See [adapter and session details](docs/experimental-plugin-vod.md). Disabling
+`experimental_plugin_vod` restores the plugin's original playback.

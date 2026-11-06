@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/television"
+	"golang.org/x/sync/singleflight"
 )
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0"
@@ -31,6 +32,7 @@ type RuntimeConfig struct {
 		Language int    `json:"language"`
 		Genre    int    `json:"genre"`
 		Slug     string `json:"slug"`
+		EPGID    string `json:"epg_id,omitempty"`
 	} `json:"channels"`
 	API struct {
 		PlaybackURL        string `json:"playback_url"`
@@ -38,14 +40,21 @@ type RuntimeConfig struct {
 		PlatformTokenRegex string `json:"platform_token_regex"`
 	} `json:"api"`
 	Headers map[string]string `json:"headers"`
+	VOD     *VODConfig        `json:"vod,omitempty"`
 }
 
 type Plugin struct {
-	Name     string
-	cfg      RuntimeConfig
-	channels []television.Channel
-	urlCache *expirable.LRU[string, string]
-	client   *http.Client
+	Name          string
+	cfg           RuntimeConfig
+	channels      []television.Channel
+	urlCache      *expirable.LRU[string, string]
+	client        *http.Client
+	vodSessionURL string
+	vodSchedule   ProgrammeResolver
+	vodCatalogue  *expirable.LRU[string, []vodItem]
+	vodSelections *expirable.LRU[string, *vodPlayback]
+	vodStreams    *expirable.LRU[string, *vodPlayback]
+	vodGroup      singleflight.Group
 }
 
 func New(name, configURL string) (*Plugin, error) {

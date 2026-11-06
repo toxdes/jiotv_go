@@ -170,6 +170,20 @@ JIOTV_FAVORITE_CHANNEL_IDS=101,102,105
 
 **Example Use Cases**:
 - Create a playlist of your favorite channels: `favorite_channel_ids = ["101", "102", "105"]` and then access the playlist at `/channels?type=m3u&fav=true`.
+### Experimental plugin VOD
+
+| Purpose | Config Value | Environment Variable | Default |
+| ----- | ------------ | -------------------- | ------- |
+| Resolve external plugin schedules to entitled on-demand content. | `experimental_plugin_vod` | `JIOTV_EXPERIMENTAL_PLUGIN_VOD` | `false` |
+| HTTP(S) URL serving private provider session JSON. | `plugin_vod_session_url` | `JIOTV_PLUGIN_VOD_SESSION_URL` | `""` |
+
+This opt-in experiment applies only to registered external plugin IDs matching
+the prefix in their runtime `vod` adapter. Numeric IDs and normal channel
+playback retain their existing behavior. Plugins without an adapter continue
+using their existing playback path.
+
+See [Experimental plugin VOD](experimental-plugin-vod.md) for setup and limits.
+
 ## Example Configurations
 
 Below are example configuration file for JioTV Go. All fields are optional, and the values shown are the default settings:
@@ -236,6 +250,8 @@ default_languages = []
 # Favorite Channel IDs to display in the M3U playlist when fav=true is used. Array of channel IDs. Default: []
 # Example: favorite_channel_ids = ["101", "102", "105"]
 favorite_channel_ids = []
+experimental_plugin_vod = false
+plugin_vod_session_url = ""
 ```
 
 This example demonstrates how to customize the configuration parameters using TOML syntax. Feel free to modify the values based on your preferences and requirements.
@@ -262,6 +278,8 @@ custom_channels_file: ""
 default_categories: []
 default_languages: []
 favorite_channel_ids: []
+experimental_plugin_vod: false
+plugin_vod_session_url: ""
 ```
 
 ### Example JSON Configuration
@@ -286,6 +304,8 @@ The file is also available at [configs/jiotv-config.json](https://github.com/jio
     "custom_channels_file": "",
     "default_categories": [],
     	"default_languages": [],
-    	"favorite_channel_ids": []
+    "favorite_channel_ids": [],
+    "experimental_plugin_vod": false,
+    "plugin_vod_session_url": ""
     }
     ```

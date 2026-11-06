@@ -147,7 +147,7 @@ func JioTVServer(jiotvServerConfig JioTVServerConfig) error {
 	app.Use("/render.dash", handlers.DashHandler)
 
 	// Plugin routes
-	plugins.Init(app)
+	plugins.Init(app, handlers.PluginVODSchedule)
 
 	if jiotvServerConfig.TLS {
 		if jiotvServerConfig.TLSCertPath == "" || jiotvServerConfig.TLSKeyPath == "" {

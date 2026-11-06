@@ -156,6 +156,12 @@
             level: "rgb(43, 125, 233)",
           },
         };
+        {{if .experimental_vod}}
+        config.addSeekBar = false;
+        config.enableKeyboardPlaybackControls = false;
+        config.controlPanelElements = config.controlPanelElements.filter((name) => name !== "time_and_duration");
+        config.overflowMenuButtons = config.overflowMenuButtons.filter((name) => name !== "chapter" && name !== "playback_rate");
+        {{end}}
         ui.configure(config);
 
         const controls = ui.getControls();
@@ -236,6 +242,9 @@
               },
               advanced: {
                 "com.widevine.alpha": {
+                  {{if .experimental_vod_certificate_url}}
+                  serverCertificateUri: "{{ .experimental_vod_certificate_url }}",
+                  {{end}}
                   videoRobustness: "SW_SECURE_CRYPTO",
                   audioRobustness: "SW_SECURE_CRYPTO",
                 },
@@ -481,6 +490,9 @@
         });
       });
     </script>
+    {{if .experimental_vod_next_url}}
+    <script src="/static/internal/plugin-vod.js" data-next-url="{{ .experimental_vod_next_url }}" defer></script>
+    {{end}}
     <!-- JTV: TV remote support (self-guarding, no-op on desktop) -->
     <script src="/static/internal/player_tv.js"></script>
   </body>

@@ -60,7 +60,9 @@ type JioTVConfig struct {
 	// SimplePlayback enables the simple HLS proxy mode. Default: false
 	SimplePlayback SimplePlaybackConfig `yaml:"simple_playback" json:"simple_playback" toml:"simple_playback"`
 	// Plugins maps plugin names to their runtime config URLs. Default: empty
-	Plugins map[string]string `yaml:"plugins" env:"JIOTV_PLUGINS" json:"plugins" toml:"plugins"`
+	Plugins               map[string]string `yaml:"plugins" env:"JIOTV_PLUGINS" json:"plugins" toml:"plugins"`
+	ExperimentalPluginVOD bool              `yaml:"experimental_plugin_vod" env:"JIOTV_EXPERIMENTAL_PLUGIN_VOD" json:"experimental_plugin_vod" toml:"experimental_plugin_vod"`
+	PluginVODSessionURL   string            `yaml:"plugin_vod_session_url" env:"JIOTV_PLUGIN_VOD_SESSION_URL" json:"plugin_vod_session_url" toml:"plugin_vod_session_url"`
 	// TV2EPGURL is an optional XMLTV gzip source used by TV2 when the Jio EPG
 	// API has no schedule for a channel (for example, external plugin channels).
 	TV2EPGURL string `yaml:"tv2_epg_url" env:"JIOTV_TV2_EPG_URL" json:"tv2_epg_url" toml:"tv2_epg_url"`

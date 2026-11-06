@@ -10,12 +10,15 @@ import (
 
 var activePlugins []*external.Plugin
 
-func Init(app *fiber.App) {
+func Init(app *fiber.App, schedule ...external.ProgrammeResolver) {
 	for name, configURL := range config.Cfg.Plugins {
 		plugin, err := external.New(name, configURL)
 		if err != nil {
 			utils.Log.Printf("Plugin %s init error: %v", name, err)
 			continue
+		}
+		if config.Cfg.ExperimentalPluginVOD && len(schedule) != 0 {
+			plugin.ConfigureVOD(config.Cfg.PluginVODSessionURL, schedule[0])
 		}
 		plugin.RegisterRoutes(app)
 		activePlugins = append(activePlugins, plugin)

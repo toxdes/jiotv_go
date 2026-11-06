@@ -13,5 +13,7 @@
     "custom_channels_file": "",
     "default_categories": [],
     "default_languages": [],
-    "favorite_channel_ids": []
+    "favorite_channel_ids": [],
+    "experimental_plugin_vod": false,
+    "plugin_vod_session_url": ""
 }

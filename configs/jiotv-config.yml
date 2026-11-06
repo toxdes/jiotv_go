@@ -53,3 +53,6 @@ default_languages: []
 # Example: ["101", "102", "105"]
 favorite_channel_ids: []
 
+
+experimental_plugin_vod: false
+plugin_vod_session_url: ""

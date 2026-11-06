@@ -56,3 +56,6 @@ favorite_channel_ids = []
 # The config JSON must contain: name, category, channels[], api.playback_url, api.auth_url, api.platform_token_regex
 # Example: plugins = { myprovider = "https://example.com/myprovider-config.json" }
 plugins = {}
+
+experimental_plugin_vod = false
+plugin_vod_session_url = ""
