@@ -391,6 +391,7 @@
             const initialManifest = new URL(playURL, window.location.href);
             if (initialManifest.origin === window.location.origin && initialManifest.pathname === "/render.mpd") {
               initialManifest.searchParams.set("startup", "1");
+              initialManifest.searchParams.set("tv2", "1");
               playURL = initialManifest.toString();
             }
           }

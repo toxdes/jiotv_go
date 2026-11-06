@@ -642,6 +642,7 @@ func MpdHandler(c *fiber.Ctx) error {
 	initialRequestURL := strings.Clone(c.OriginalURL())
 	channelID := c.Query("channel_id")
 	quality := c.Query("q")
+	tv2Playback := c.Query("tv2") == "1"
 	proxyUrl := c.Query("auth")
 	if proxyUrl == "" {
 		c.Status(fiber.StatusBadRequest)
@@ -661,9 +662,11 @@ func MpdHandler(c *fiber.Ctx) error {
 		return fmt.Errorf("invalid auth token: %w", err)
 	}
 
+	var playback *television.LiveURLOutput
 	reuseInitial := c.Query("startup") == "1" && canReuseInitialMPD(channelID, quality, proxyUrl, decryptedUrl)
 	if channelID != "" && !reuseInitial {
 		if liveResult, liveErr := TV.Live(channelID); liveErr == nil && liveResult != nil {
+			playback = liveResult
 			if freshUrl := selectBestLiveMPDURL(liveResult, quality); freshUrl != "" {
 				decryptedUrl = freshUrl
 				parsedUrl, err = url.Parse(decryptedUrl)
@@ -731,6 +734,9 @@ func MpdHandler(c *fiber.Ctx) error {
 		}
 		query := retryURL.Query()
 		query.Del("startup")
+		if tv2Playback && statusCode == fiber.StatusNotFound && (quality == "high" || quality == "h") {
+			query.Set("high_retry", "1")
+		}
 		retryURL.RawQuery = query.Encode()
 		c.Response().Reset()
 		return c.Redirect(retryURL.RequestURI(), fiber.StatusTemporaryRedirect)
@@ -787,6 +793,38 @@ func MpdHandler(c *fiber.Ctx) error {
 	}
 
 	c.Response().Header.Del(fiber.HeaderServer)
+	if tv2Playback && channelID != "" && (quality == "high" || quality == "h") && c.Response().StatusCode() == fiber.StatusNotFound {
+		retryURL, parseErr := url.Parse(initialRequestURL)
+		if parseErr != nil {
+			return fiber.ErrBadRequest
+		}
+		query := retryURL.Query()
+		query.Del("startup")
+		if query.Get("high_retry") != "1" {
+			query.Set("high_retry", "1")
+		} else {
+			autoURL := ""
+			if playback != nil {
+				autoURL = playback.Mpd.ResolvedBitrates().Auto
+				if autoURL == "" {
+					autoURL = playback.Mpd.Result
+				}
+			}
+			if autoURL == "" || stripHDNEAFromURL(autoURL) == stripHDNEAFromURL(requestUrl) {
+				return nil
+			}
+			auth, encryptErr := secureurl.EncryptURL(autoURL)
+			if encryptErr != nil {
+				return encryptErr
+			}
+			query.Set("auth", auth)
+			query.Set("q", "auto")
+			query.Del("high_retry")
+		}
+		retryURL.RawQuery = query.Encode()
+		c.Response().Reset()
+		return c.Redirect(retryURL.RequestURI(), fiber.StatusTemporaryRedirect)
+	}
 
 	// Extract __hdnea__ from upstream response for injecting into dashBaseURL
 	upstreamHDNEA := ""

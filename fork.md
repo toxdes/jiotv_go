@@ -25,3 +25,4 @@ This fork adds two TV-focused interfaces alongside the upstream application.
 - Playback fixes for channels that previously loaded without video
 - A small live-broadcast delay to reduce buffering
 - Reuse of fresh stream information during startup, with automatic refresh when needed
+- If a high-quality stream is missing, `/tv2` retries it before trying auto quality
