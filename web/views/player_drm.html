@@ -338,7 +338,7 @@
               if (
                 channelHost !== "" &&
                 channelPath !== "" &&
-                !newUrl.pathname.includes("/render.dash/host/") &&
+                !/^\/render\.dash\/(?:channel\/[^/]+\/)?host\//.test(newUrl.pathname) &&
                 !newUrl.searchParams.has("host") &&
                 !newUrl.searchParams.has("path")
               ) {

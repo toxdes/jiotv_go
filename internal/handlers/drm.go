@@ -850,7 +850,7 @@ func DashHandler(c *fiber.Ctx) error {
 	// Extract embedded HDNEA if present
 	var hdneaToken string
 
-	if proxyHost == "" || proxyPath == "" {
+	if strings.HasPrefix(requestPath, "/render.dash/host/") {
 		const prefix = "/render.dash/host/"
 		if strings.HasPrefix(requestPath, prefix) {
 			trimmed := strings.TrimPrefix(requestPath, prefix)
