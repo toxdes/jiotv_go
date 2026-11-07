@@ -16,7 +16,7 @@ import (
 )
 
 var vodTemplatePattern = regexp.MustCompile(`\$(RepresentationID|Number|Bandwidth|Time)(?:%0[0-9]+d)?\$`)
-var vodTemplateValue = regexp.MustCompile(`^[A-Za-z0-9_.=-]{1,128}$`)
+var vodTemplateValue = regexp.MustCompile(`^[A-Za-z0-9_./=-]{1,128}$`)
 
 func (p *Plugin) vodResourceURL(stream string, target string) (string, error) {
 	encoded, err := secureurl.EncryptURLDeterministic(target)
@@ -54,9 +54,15 @@ func (p *Plugin) vodResourceHandler(c *fiber.Ctx) error {
 	target = vodTemplatePattern.ReplaceAllStringFunc(target, func(template string) string {
 		parts := vodTemplatePattern.FindStringSubmatch(template)
 		value := c.Query(parts[1])
-		if !vodTemplateValue.MatchString(value) {
+		if !vodTemplateValue.MatchString(value) || strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") || strings.Contains(value, "//") {
 			valid = false
 			return ""
+		}
+		for _, segment := range strings.Split(value, "/") {
+			if segment == "." || segment == ".." {
+				valid = false
+				return ""
+			}
 		}
 		if parts[1] != "RepresentationID" && strings.IndexFunc(value, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
 			valid = false

@@ -76,6 +76,14 @@ func prewarmTV2PluginEPG(channelID string) {
 // TV2EPGHandler returns XMLTV programme data for channels that are absent from
 // Jio's per-channel EPG API, including external plugin channel IDs.
 func TV2EPGHandler(c *fiber.Ctx) error {
+	if guide, handled, err := plugins.VODGuide(c.Params("channelID")); handled {
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadGateway, err.Error())
+		}
+		c.Set("Cache-Control", "no-store")
+		return c.JSON(fiber.Map{"epg": guide, "server_time": time.Now().UnixMilli(), "scheduled": true})
+	}
+
 	_, isPluginChannel := plugins.GetChannelPluginID(c.Params("channelID"))
 	if isPluginChannel {
 		if index, err := getTV2ExternalEPG(tv2JioEPGMappingSource()); err == nil {

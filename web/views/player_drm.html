@@ -81,7 +81,13 @@
           />
         </svg>
       </button>
+      {{if .experimental_vod_logo}}
+      <img src="{{ .experimental_vod_logo }}" alt="{{ .experimental_vod_channel_name }}" style="position:absolute;top:4%;right:4%;width:clamp(80px,10vw,180px);max-height:16vh;object-fit:contain;z-index:5;pointer-events:none;opacity:0.9" />
+      {{end}}
     </div>
+    {{if .experimental_vod_next_url}}
+    <script src="/static/internal/plugin-vod.js" data-next-url="{{ .experimental_vod_next_url }}" {{if .experimental_vod_schedule}}data-start="{{ .experimental_vod_start }}" data-end="{{ .experimental_vod_end }}" data-duration="{{ .experimental_vod_duration }}" data-server-time="{{ .experimental_vod_server_time }}" data-clock-url="{{ .experimental_vod_clock_url }}" data-padding="{{ .experimental_vod_padding }}"{{end}}></script>
+    {{end}}
     <script>
       document.addEventListener("shaka-ui-load-failed", () => {
         const hlsPlayerFallbackUrl = "{{ .hls_player_fallback_url }}";
@@ -404,7 +410,13 @@
               playURL = initialManifest.toString();
             }
           }
+          {{if .experimental_vod_schedule}}
+          await window.pluginVODPlayback.ready;
+          await player.load(playURL, window.pluginVODPlayback.offset());
+          window.pluginVODPlayback.start();
+          {{else}}
           await player.load(playURL);
+          {{end}}
           preferHindiAudio();
           publishTV2AudioTracks();
           try {
@@ -490,9 +502,6 @@
         });
       });
     </script>
-    {{if .experimental_vod_next_url}}
-    <script src="/static/internal/plugin-vod.js" data-next-url="{{ .experimental_vod_next_url }}" defer></script>
-    {{end}}
     <!-- JTV: TV remote support (self-guarding, no-op on desktop) -->
     <script src="/static/internal/player_tv.js"></script>
   </body>

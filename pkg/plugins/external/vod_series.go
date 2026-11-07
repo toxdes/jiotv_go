@@ -2,12 +2,12 @@ package external
 
 import (
 	"fmt"
-	"math/rand/v2"
 	"sort"
 	"time"
 )
 
-func (p *Plugin) vodSeriesEpisodes(session *vodSession, show vodItem, language string, random bool) ([]vodItem, error) {
+func (p *Plugin) vodSeriesEpisodes(session *vodSession, show vodItem, language string, random bool, seeds ...uint64) ([]vodItem, error) {
+	rng := vodRandom(seeds...)
 	spec := p.cfg.VOD.Series
 	if spec == nil || spec.PageSize <= 0 {
 		return nil, fmt.Errorf("episode catalogue is not configured")
@@ -23,7 +23,7 @@ func (p *Plugin) vodSeriesEpisodes(session *vodSession, show vodItem, language s
 	seasons := vodReadItems(response, spec.Seasons)
 	sort.SliceStable(seasons, func(i, j int) bool { return seasons[i].Order > seasons[j].Order })
 	if random {
-		rand.Shuffle(len(seasons), func(i, j int) { seasons[i], seasons[j] = seasons[j], seasons[i] })
+		rng.Shuffle(len(seasons), func(i, j int) { seasons[i], seasons[j] = seasons[j], seasons[i] })
 	}
 	for _, season := range seasons {
 		variables["season"] = map[string]any{"id": season.ID, "order": season.Order, "total_items": season.TotalItems}
@@ -32,7 +32,7 @@ func (p *Plugin) vodSeriesEpisodes(session *vodSession, show vodItem, language s
 			pages = append(pages, last)
 		}
 		if random {
-			pages = []int{1 + rand.IntN(max(1, (season.TotalItems+spec.PageSize-1)/spec.PageSize))}
+			pages = []int{1 + rng.IntN(max(1, (season.TotalItems+spec.PageSize-1)/spec.PageSize))}
 		}
 		seen := make(map[string]bool)
 		var episodes []vodItem
@@ -64,7 +64,7 @@ func (p *Plugin) vodSeriesEpisodes(session *vodSession, show vodItem, language s
 			return episodes[i].ReleaseDate > episodes[j].ReleaseDate
 		})
 		if random {
-			rand.Shuffle(len(episodes), func(i, j int) { episodes[i], episodes[j] = episodes[j], episodes[i] })
+			rng.Shuffle(len(episodes), func(i, j int) { episodes[i], episodes[j] = episodes[j], episodes[i] })
 		}
 		if len(episodes) > 0 {
 			return episodes[:min(5, len(episodes))], nil

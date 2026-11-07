@@ -4,8 +4,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jiotv-go/jiotv_go/v3/internal/config"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/plugins/external"
+	"github.com/jiotv-go/jiotv_go/v3/pkg/store"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/television"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/utils"
+	"path/filepath"
 )
 
 var activePlugins []*external.Plugin
@@ -18,7 +20,7 @@ func Init(app *fiber.App, schedule ...external.ProgrammeResolver) {
 			continue
 		}
 		if config.Cfg.ExperimentalPluginVOD && len(schedule) != 0 {
-			plugin.ConfigureVOD(config.Cfg.PluginVODSessionURL, schedule[0])
+			plugin.ConfigureVOD(config.Cfg.PluginVODSessionURL, schedule[0], filepath.Join(store.GetPathPrefix(), "plugin-vod-schedules"))
 		}
 		plugin.RegisterRoutes(app)
 		activePlugins = append(activePlugins, plugin)
@@ -41,4 +43,23 @@ func GetChannelPluginID(id string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func HasVODSchedule(id string) bool {
+	for _, p := range activePlugins {
+		if p.HasVODSchedule(id) {
+			return true
+		}
+	}
+	return false
+}
+
+func VODGuide(id string) ([]external.Programme, bool, error) {
+	for _, p := range activePlugins {
+		if p.HasVODSchedule(id) {
+			guide, err := p.VODGuide(id)
+			return guide, true, err
+		}
+	}
+	return nil, false, nil
 }

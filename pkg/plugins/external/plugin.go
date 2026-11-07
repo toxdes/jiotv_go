@@ -49,6 +49,8 @@ type Plugin struct {
 	channels      []television.Channel
 	urlCache      *expirable.LRU[string, string]
 	client        *http.Client
+	vodStateDir   string
+	vodDays       *expirable.LRU[string, []vodScheduledItem]
 	vodSessionURL string
 	vodSchedule   ProgrammeResolver
 	vodCatalogue  *expirable.LRU[string, []vodItem]

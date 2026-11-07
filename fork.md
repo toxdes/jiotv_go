@@ -32,13 +32,17 @@ This fork adds two TV-focused interfaces alongside the upstream application.
 Optionally replaces configured plugin channels with on-demand content matched
 from their programme guide. Shows use the latest available episode; movies play
 directly. Per-channel fallback rules can choose random show episodes or movies
-filtered by language and rating. Playback uses `/tv2` without seek controls.
+filtered by language and rating. Optional schedules seek to the current
+programme, replay short episodes until
+the next EPG slot, or generate continuous daily movie lineups. `/tv2` uses the
+same guide and can overlay channel logos, without seek controls.
 The feature is disabled by default; numeric channels retain normal playback.
 
 To set up:
 
 1. Serve a plugin JSON containing the channel list and a `vod` adapter, then
-   register its URL in `plugins` as usual. Configure any fallback rules there.
+   register its URL in `plugins` as usual. Configure fallbacks and optional
+   `vod.schedules` rules there (`guide` or `movies`, timezone, and logo).
 2. Serve a valid account session JSON from a privately accessible HTTP(S) URL,
    separate from the public plugin JSON. Use HTTPS outside a trusted network.
 3. Enable it in the server config:

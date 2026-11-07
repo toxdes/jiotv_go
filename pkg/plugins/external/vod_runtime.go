@@ -44,21 +44,28 @@ type VODFallback struct {
 	AllowedRatings []string  `json:"allowed_ratings"`
 }
 
+type VODScheduleConfig struct {
+	Mode     string `json:"mode"`
+	Timezone string `json:"timezone"`
+	Logo     bool   `json:"logo"`
+}
+
 type VODConfig struct {
-	Fallbacks                map[string]VODFallback `json:"fallbacks,omitempty"`
-	CertificateResponseField int                    `json:"certificate_response_field"`
-	CertificateRequest       string                 `json:"certificate_request"`
-	ChannelPrefix            string                 `json:"channel_prefix"`
-	LanguageCodes            map[string]string      `json:"language_codes"`
-	AssetTypes               map[string]int         `json:"asset_types"`
-	Constants                map[string]any         `json:"constants"`
-	SessionCookies           map[string]string      `json:"session_cookies"`
-	SessionDefaults          map[string]any         `json:"session_defaults"`
-	RequiredSession          []string               `json:"required_session"`
-	Series                   *VODSeries             `json:"series,omitempty"`
-	Catalogue                VODCatalogue           `json:"catalogue"`
-	Playback                 VODPlaybackConfig      `json:"playback"`
-	License                  VODRequest             `json:"license"`
+	Schedules                map[string]VODScheduleConfig `json:"schedules,omitempty"`
+	Fallbacks                map[string]VODFallback       `json:"fallbacks,omitempty"`
+	CertificateResponseField int                          `json:"certificate_response_field"`
+	CertificateRequest       string                       `json:"certificate_request"`
+	ChannelPrefix            string                       `json:"channel_prefix"`
+	LanguageCodes            map[string]string            `json:"language_codes"`
+	AssetTypes               map[string]int               `json:"asset_types"`
+	Constants                map[string]any               `json:"constants"`
+	SessionCookies           map[string]string            `json:"session_cookies"`
+	SessionDefaults          map[string]any               `json:"session_defaults"`
+	RequiredSession          []string                     `json:"required_session"`
+	Series                   *VODSeries                   `json:"series,omitempty"`
+	Catalogue                VODCatalogue                 `json:"catalogue"`
+	Playback                 VODPlaybackConfig            `json:"playback"`
+	License                  VODRequest                   `json:"license"`
 }
 
 var vodVariablePattern = regexp.MustCompile(`\{\{([A-Za-z0-9_.:]+)\}\}`)

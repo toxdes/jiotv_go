@@ -6,12 +6,12 @@ import (
 	"slices"
 )
 
-func (p *Plugin) vodFallbackItems(session *vodSession, rule VODFallback) ([]vodItem, error) {
+func (p *Plugin) vodFallbackItems(session *vodSession, rule VODFallback, seeds ...uint64) ([]vodItem, error) {
 	if rule.Language == "" || len(rule.Items) == 0 {
 		return nil, fmt.Errorf("fallback pool is not configured")
 	}
 	pool := slices.Clone(rule.Items)
-	rand.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+	vodRandom(seeds...).Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
 	var candidates []vodItem
 	for _, configured := range pool {
 		if configured.AssetType == p.cfg.VOD.AssetTypes["show"] {
@@ -39,4 +39,11 @@ func (p *Plugin) vodFallbackItems(session *vodSession, rule VODFallback) ([]vodI
 		return nil, fmt.Errorf("no fallback movies satisfy the configured language and rating rules")
 	}
 	return candidates, nil
+}
+
+func vodRandom(seeds ...uint64) *rand.Rand {
+	if len(seeds) > 0 {
+		return rand.New(rand.NewPCG(seeds[0], seeds[0]^0x9e3779b97f4a7c15))
+	}
+	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 }

@@ -42,6 +42,7 @@ type vodSession struct {
 }
 
 type vodItem struct {
+	Duration      int      `json:"duration"`
 	AgeRating     string   `json:"ageRating"`
 	ID            string   `json:"id"`
 	Title         string   `json:"title"`
@@ -56,6 +57,7 @@ type vodItem struct {
 }
 
 type vodPlayback struct {
+	Padding        bool
 	Fallback       bool
 	ID             string
 	ChannelID      string
@@ -67,11 +69,15 @@ type vodPlayback struct {
 	IsDRM          bool
 }
 
-func (p *Plugin) ConfigureVOD(sessionURL string, schedule ProgrammeResolver) {
+func (p *Plugin) ConfigureVOD(sessionURL string, schedule ProgrammeResolver, stateDir ...string) {
 	if p.cfg.VOD == nil || p.cfg.VOD.ChannelPrefix == "" || p.cfg.VOD.Catalogue.Request.URL == "" || p.cfg.VOD.Playback.Request.URL == "" || schedule == nil {
 		return
 	}
 	p.vodSessionURL = sessionURL
+	if len(stateDir) > 0 {
+		p.vodStateDir = stateDir[0]
+	}
+	p.vodDays = expirable.NewLRU[string, []vodScheduledItem](128, nil, 48*time.Hour)
 	p.vodSchedule = schedule
 	p.vodCatalogue = expirable.NewLRU[string, []vodItem](256, nil, 15*time.Minute)
 	p.vodSelections = expirable.NewLRU[string, *vodPlayback](128, nil, 5*time.Minute)
@@ -195,7 +201,7 @@ func vodReadItems(response any, spec VODCatalogue) []vodItem {
 	fields := spec.Fields
 	var items []vodItem
 	for _, object := range vodPathValues(response, spec.ItemsPath) {
-		item := vodItem{AgeRating: vodString(vodPath(object, fields["age_rating"])), ID: vodString(vodPath(object, fields["id"])), Title: vodString(vodPath(object, fields["title"])), OriginalTitle: vodString(vodPath(object, fields["original_title"])), AssetType: vodInt(vodPath(object, fields["asset_type"])), ReleaseDate: vodString(vodPath(object, fields["release_date"])), EpisodeNumber: vodInt(vodPath(object, fields["episode_number"])), Order: vodInt(vodPath(object, fields["order"])), TotalItems: vodInt(vodPath(object, fields["total_items"]))}
+		item := vodItem{Duration: vodInt(vodPath(object, fields["duration"])), AgeRating: vodString(vodPath(object, fields["age_rating"])), ID: vodString(vodPath(object, fields["id"])), Title: vodString(vodPath(object, fields["title"])), OriginalTitle: vodString(vodPath(object, fields["original_title"])), AssetType: vodInt(vodPath(object, fields["asset_type"])), ReleaseDate: vodString(vodPath(object, fields["release_date"])), EpisodeNumber: vodInt(vodPath(object, fields["episode_number"])), Order: vodInt(vodPath(object, fields["order"])), TotalItems: vodInt(vodPath(object, fields["total_items"]))}
 		if languages, ok := vodPath(object, fields["languages"]).([]any); ok {
 			for _, language := range languages {
 				item.Languages = append(item.Languages, vodString(language))
@@ -308,6 +314,9 @@ func (p *Plugin) vodResolve(id string, after int64) (*vodPlayback, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.HasVODSchedule(id) {
+		return p.vodResolveScheduled(session, id, time.Now())
+	}
 	name, language, epgID := "", "", id
 	for _, channel := range p.cfg.Channels {
 		if channel.ID == id {
@@ -344,46 +353,12 @@ func (p *Plugin) vodResolve(id string, after int64) (*vodPlayback, error) {
 		if cached, ok := p.vodSelections.Get(key); ok {
 			return cached, nil
 		}
-		items, err := p.vodSearch(session, programme.Title, language)
-		if err != nil {
-			return nil, err
-		}
-		candidates, _, err := p.matchVODItems(programme, items, language)
-		fallback := false
-		if errors.Is(err, errVODNoMatch) {
-			if rule, ok := p.cfg.VOD.Fallbacks[id]; ok {
-				candidates, err = p.vodFallbackItems(session, rule)
-				language = rule.Language
-				fallback = true
-			}
+		candidates, fallback, err := p.vodCandidates(session, id, programme, language)
+		if fallback {
+			language = p.cfg.VOD.Fallbacks[id].Language
 		}
 		if err != nil {
 			return nil, err
-		}
-		matched := candidates[0]
-		if matched.AssetType == p.cfg.VOD.AssetTypes["episode"] && matched.TVShow != nil {
-			matched = *matched.TVShow
-		}
-		if p.cfg.VOD.Series != nil && matched.ID != "" && (candidates[0].AssetType == p.cfg.VOD.AssetTypes["show"] || candidates[0].AssetType == p.cfg.VOD.AssetTypes["episode"]) {
-			candidates, err = p.vodSeriesEpisodes(session, matched, language, fallback)
-			if err != nil {
-				return nil, err
-			}
-		} else if candidates[0].AssetType == p.cfg.VOD.AssetTypes["show"] {
-			matched := candidates[0]
-			items, err = p.vodSearch(session, matched.Title, language)
-			if err != nil {
-				return nil, err
-			}
-			exact := programme
-			exact.Title = matched.Title
-			candidates, _, err = p.matchVODItems(exact, items, language)
-			if err != nil {
-				return nil, err
-			}
-			if candidates[0].AssetType == p.cfg.VOD.AssetTypes["show"] {
-				return nil, fmt.Errorf("matched show has no released episodes in the catalogue results")
-			}
 		}
 		var lastError error
 		for _, item := range candidates {
@@ -417,6 +392,9 @@ func (p *Plugin) vodContentPlayback(session *vodSession, item vodItem, language 
 		return nil, err
 	}
 	fields := p.cfg.VOD.Playback.Fields
+	if duration := vodInt(vodPath(response, fields["duration"])); duration > 0 {
+		item.Duration = duration
+	}
 	if vodBool(vodPath(response, fields["trailer"])) {
 		return nil, fmt.Errorf("provider returned a trailer instead of full playback")
 	}
@@ -446,3 +424,49 @@ func (p *Plugin) vodContentPlayback(session *vodSession, item vodItem, language 
 }
 
 func vodAfter(value string) int64 { after, _ := strconv.ParseInt(value, 10, 64); return after }
+
+func (p *Plugin) vodCandidates(session *vodSession, id string, programme Programme, language string, seeds ...uint64) ([]vodItem, bool, error) {
+	items, err := p.vodSearch(session, programme.Title, language)
+	if err != nil {
+		return nil, false, err
+	}
+	candidates, _, err := p.matchVODItems(programme, items, language)
+	fallback := false
+	if errors.Is(err, errVODNoMatch) {
+		if rule, ok := p.cfg.VOD.Fallbacks[id]; ok {
+			candidates, err = p.vodFallbackItems(session, rule, seeds...)
+			language = rule.Language
+			fallback = true
+		}
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	matched := candidates[0]
+	if matched.AssetType == p.cfg.VOD.AssetTypes["episode"] && matched.TVShow != nil {
+		matched = *matched.TVShow
+	}
+	if p.cfg.VOD.Series != nil && matched.ID != "" && (candidates[0].AssetType == p.cfg.VOD.AssetTypes["show"] || candidates[0].AssetType == p.cfg.VOD.AssetTypes["episode"]) {
+		candidates, err = p.vodSeriesEpisodes(session, matched, language, fallback, seeds...)
+		if err != nil {
+			return nil, false, err
+		}
+	} else if candidates[0].AssetType == p.cfg.VOD.AssetTypes["show"] {
+		matched := candidates[0]
+		items, err = p.vodSearch(session, matched.Title, language)
+		if err != nil {
+			return nil, false, err
+		}
+		exact := programme
+		exact.Title = matched.Title
+		candidates, _, err = p.matchVODItems(exact, items, language)
+		if err != nil {
+			return nil, false, err
+		}
+		if candidates[0].AssetType == p.cfg.VOD.AssetTypes["show"] {
+			return nil, false, fmt.Errorf("matched show has no released episodes in the catalogue results")
+		}
+	}
+
+	return candidates, fallback, nil
+}

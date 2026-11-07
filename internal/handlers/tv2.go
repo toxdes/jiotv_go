@@ -75,7 +75,7 @@ func TV2Handler(c *fiber.Ctx) error {
 		if isPlugin {
 			// af=1 enables the HLS player's DRM-equivalent autoplay policy:
 			// attempt unmuted playback, then retry muted if the browser requires it.
-			if !isTV2NumericChannelID(ch.ID) {
+			if !isTV2NumericChannelID(ch.ID) && !plugins.HasVODSchedule(ch.ID) {
 				epgChannelID = findTV2JioEPGChannelID(ch.Name, jioChannels)
 			}
 		}

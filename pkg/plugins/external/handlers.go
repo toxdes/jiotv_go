@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	internalUtils "github.com/jiotv-go/jiotv_go/v3/internal/utils"
@@ -318,6 +319,10 @@ func (p *Plugin) RegisterRoutes(app *fiber.App) {
 	app.Post(prefix+"/vod/license/:stream", p.vodLicenseHandler)
 	app.Get(prefix+"/vod/certificate/:stream", p.vodLicenseHandler)
 	app.Get(prefix+"/vod/selection/:id", p.vodSelectionHandler)
+	app.Get(prefix+"/vod/time", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store")
+		return c.JSON(fiber.Map{"server_time": time.Now().UnixMilli()})
+	})
 	app.Get(prefix+"/:id", p.LiveHandler)
 	app.Get(prefix+"/play/:id", p.PlayHandler)
 	app.Get(prefix+"/player/:id", p.PlayerHandler)

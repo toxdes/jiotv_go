@@ -91,23 +91,41 @@ newest released episode, trying up to five recent episodes if newer ones are
 not playable. Adapters without this lookup use episodes in search results. Catalogue
 matches are cached for 15 minutes and playback selections for five minutes.
 
-Playback starts at the beginning and has no seek bar, duration control, chapter
-navigation, playback-rate selector, or keyboard seeking. When an item ends,
-the player selects the next guide slot. Programme lengths can differ from the
-original broadcast, so this is an approximate schedule rather than a replica
-of the broadcast. Missing guide entries, unavailable titles, ambiguous matches,
-and entitlement restrictions produce an explicit error by default. Optional
-`vod.fallbacks` rules keyed by exact plugin channel ID replace unmatched titles
-only. Each rule supplies `language` and `items` (`id`, `title`, `assetType`).
-A show item selects a random season, page, and released episode. Movie pools
-are shuffled and rechecked against catalogue IDs, language, and exact
-`allowed_ratings`; missing or disallowed ratings are rejected. This requires
-the catalogue to map `age_rating`. Existing matches and channels without a
-rule retain their behavior; authentication and API errors do not trigger a
-fallback. Selections stay stable for the slot cache lifetime.
+Without a schedule rule, playback starts at the beginning and advances when
+an item ends. Optional `vod.schedules` rules, keyed by exact plugin channel ID,
+make `/tv2` use a generated guide and start video at its current position:
 
-The first implementation targets the web player;
-existing HLS-only IPTV clients may not support VOD responses requiring DASH.
+```json
+"schedules": {
+  "example-show-channel": {"mode": "guide", "timezone": "Asia/Kolkata", "logo": true},
+  "example-movie-channel": {"mode": "movies", "timezone": "Asia/Kolkata", "logo": true}
+}
+```
+
+`guide` keeps the source EPG boundaries, maps a show to its latest episode, and
+uses configured fallbacks for unmatched titles. Episodes that finish early
+replay their ending until the next slot; longer episodes are cut at the slot
+boundary. The current slot resolves first; future mappings warm in the background.
+
+`movies` replaces the source guide with a daily randomized lineup from the
+channel's language/rating-filtered fallback movie pool. Slots use actual
+runtimes. Any leftover time is filled with a repeat immediately after midnight,
+before 06:00, so there are no daytime gaps. The lineup is generated on demand;
+the server does not need to run at midnight or continuously.
+
+Scheduled channels require `duration` in catalogue/episode field mappings
+(seconds); `playback.fields.duration` can supply the final runtime. Their
+selection is saved under `plugin-vod-schedules` inside the server's existing
+path prefix, without credentials or signed media URLs. Movie lineups and slot
+choices survive restarts. Changing the adapter starts a new schedule cache.
+
+The player uses server time for offsets, resynchronizes after interruptions,
+and reloads at slot boundaries. `/tv2` shows the same generated guide and
+progress. `logo: true` overlays the configured channel image at the top right.
+There are no seek, duration, chapter, playback-rate, or keyboard seek controls.
+Channels without schedule rules retain the original experimental behavior;
+numeric channels and the normal media/DRM handlers are unaffected. Missing
+guides, unavailable titles, or entitlement failures produce explicit errors.
 
 For a sanitized current selection, request
 `/<plugin>/vod/selection/<channel-id>`. It reports programme and content
